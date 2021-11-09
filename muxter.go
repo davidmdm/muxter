@@ -108,6 +108,26 @@ func (m *Mux) Delete(pattern string, handler http.Handler) {
 	m.add("delete", pattern, handler)
 }
 
+func (m *Mux) GetFunc(pattern string, handler http.HandlerFunc) {
+	m.add("get", pattern, handler)
+}
+
+func (m *Mux) PostFunc(pattern string, handler http.HandlerFunc) {
+	m.add("post", pattern, handler)
+}
+
+func (m *Mux) PatchFunc(pattern string, handler http.HandlerFunc) {
+	m.add("patch", pattern, handler)
+}
+
+func (m *Mux) PutFunc(pattern string, handler http.HandlerFunc) {
+	m.add("put", pattern, handler)
+}
+
+func (m *Mux) DeleteFunc(pattern string, handler http.HandlerFunc) {
+	m.add("delete", pattern, handler)
+}
+
 func (m *Mux) add(method, pattern string, fn http.Handler) {
 	n := m.methodToNode(method)
 

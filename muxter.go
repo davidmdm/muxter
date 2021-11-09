@@ -99,11 +99,13 @@ func (m Mux) ServeHTTP(res http.ResponseWriter, req *http.Request) {
 	handler.ServeHTTP(res, req)
 }
 
-func (m *Mux) HandleFunc(pattern string, handler http.HandlerFunc) {
-	m.Handle(pattern, handler)
+func (m *Mux) HandleFunc(pattern string, handler http.HandlerFunc, middlewares ...Middleware) {
+	m.Handle(pattern, handler, middlewares...)
 }
 
-func (m *Mux) Handle(pattern string, handler http.Handler) {
+func (m *Mux) Handle(pattern string, handler http.Handler, middlewares ...Middleware) {
+	handler = withMiddleware(handler, middlewares...)
+
 	n := &m.root
 
 	var key string

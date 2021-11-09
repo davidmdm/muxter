@@ -88,6 +88,17 @@ func New() *Mux {
 	return &Mux{}
 }
 
+func (m Mux) ServeHTTP(res http.ResponseWriter, req *http.Request) {
+	handler, params, _ := m.root.lookup(cleanPath(req.URL.Path))
+
+	if params != nil {
+		ctx := context.WithValue(req.Context(), paramKey, params)
+		req = req.WithContext(ctx)
+	}
+
+	handler.ServeHTTP(res, req)
+}
+
 func (m *Mux) HandleFunc(pattern string, handler http.HandlerFunc) {
 	m.Handle(pattern, handler)
 }
@@ -135,25 +146,9 @@ func (m *Mux) Handle(pattern string, handler http.Handler) {
 	}
 }
 
-func (m Mux) lookupHandler(method, url string) (http.Handler, map[string]string) {
-	handler, params, _ := m.root.lookup(url)
-	return handler, params
-}
-
 type paramKeyType int
 
 var paramKey paramKeyType
-
-func (m Mux) ServeHTTP(res http.ResponseWriter, req *http.Request) {
-	handler, params := m.lookupHandler(req.Method, cleanPath(req.URL.Path))
-
-	if params != nil {
-		ctx := context.WithValue(req.Context(), paramKey, params)
-		req = req.WithContext(ctx)
-	}
-
-	handler.ServeHTTP(res, req)
-}
 
 func Param(r *http.Request, param string) string {
 	if r == nil {

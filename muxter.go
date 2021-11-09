@@ -117,27 +117,27 @@ func (m *Mux) add(method, pattern string, fn http.Handler) {
 	for {
 		key, pattern = split(pattern)
 		if key != "" {
+			var nodeMap map[string]*node
 			if key[0] == ':' {
 				if n.wildcards == nil {
 					n.wildcards = make(map[string]*node)
 				}
-				next, ok := n.wildcards[key[1:]]
-				if !ok {
-					next = &node{}
-					n.wildcards[key[1:]] = next
-				}
-				n = next
+				nodeMap = n.wildcards
+				key = key[1:]
 			} else {
 				if n.children == nil {
 					n.children = make(map[string]*node)
 				}
-				next, ok := n.children[key]
-				if !ok {
-					next = &node{}
-					n.children[key] = next
-				}
-				n = next
+				nodeMap = n.children
 			}
+
+			next, ok := nodeMap[key]
+			if !ok {
+				next = &node{}
+				nodeMap[key] = next
+			}
+			n = next
+
 			continue
 		}
 
@@ -147,7 +147,7 @@ func (m *Mux) add(method, pattern string, fn http.Handler) {
 			n.fixedHandler = fn
 		}
 
-		break
+		return
 	}
 }
 

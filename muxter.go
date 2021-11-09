@@ -92,14 +92,17 @@ func (n *node) lookup(url string) (handler http.Handler, params map[string]strin
 	}
 }
 
+// Mux is a request multiplexer with the same routing behaviour as the standard libraries net/http ServeMux
 type Mux struct {
 	root node
 }
 
+// New returns a pointer to a new muxter.Mux
 func New() *Mux {
 	return &Mux{}
 }
 
+// ServeHTTP implements the net/http Handler interface.
 func (m Mux) ServeHTTP(res http.ResponseWriter, req *http.Request) {
 	handler, params, _ := m.root.lookup(cleanPath(req.URL.Path))
 
@@ -111,10 +114,16 @@ func (m Mux) ServeHTTP(res http.ResponseWriter, req *http.Request) {
 	handler.ServeHTTP(res, req)
 }
 
+// HandleFunc registers a net/http HandlerFunc for a given string pattern. Middlewares are applied
+// such that the first middleware will be called before passing control to the next middleware.
+// ie mux.HandleFunc(pattern, handler, m1, m2, m3) => request flow will pass through m1 then m2 then m3.
 func (m *Mux) HandleFunc(pattern string, handler http.HandlerFunc, middlewares ...Middleware) {
 	m.Handle(pattern, handler, middlewares...)
 }
 
+// Handle registers a net/http HandlerFunc for a given string pattern. Middlewares are applied
+// such that the first middleware will be called before passing control to the next middleware.
+// ie mux.HandleFunc(pattern, handler, m1, m2, m3) => request flow will pass through m1 then m2 then m3.
 func (m *Mux) Handle(pattern string, handler http.Handler, middlewares ...Middleware) {
 	handler = withMiddleware(handler, middlewares...)
 
@@ -164,6 +173,7 @@ type paramKeyType int
 
 var paramKey paramKeyType
 
+// Param reads path params from the request
 func Param(r *http.Request, param string) string {
 	if r == nil {
 		return ""

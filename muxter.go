@@ -20,17 +20,17 @@ type node struct {
 	subtreeHandler http.Handler
 }
 
-func (n *node) lookup(url string) (handler http.Handler, params map[string]string, deepness int) {
+func (n *node) lookup(url string) (handler http.Handler, params map[string]string, depth int) {
 	var key string
 	var subtreeHandler http.Handler
-	var subtreeDeepness int
+	var subtreeDepth int
 
-	orignalUrlLength := len(url)
+	maxUrlLength := len(url)
 
 	for {
 		if n.subtreeHandler != nil {
 			subtreeHandler = n.subtreeHandler
-			subtreeDeepness = orignalUrlLength - len(url)
+			subtreeDepth = maxUrlLength - len(url)
 		}
 
 		key, url = split(url)
@@ -59,22 +59,22 @@ func (n *node) lookup(url string) (handler http.Handler, params map[string]strin
 				}
 				params[card] = key
 
-				return handler, params, orignalUrlLength - len(url) + max
+				return handler, params, maxUrlLength - len(url) + max
 			}
 
 			if subtreeHandler != nil {
-				return subtreeHandler, params, subtreeDeepness
+				return subtreeHandler, params, subtreeDepth
 			}
 
 			return defaultNotFoundHandler, params, 0
 		}
 
 		if url == "" && n.fixedHandler != nil {
-			return n.fixedHandler, params, orignalUrlLength
+			return n.fixedHandler, params, maxUrlLength
 		}
 
 		if subtreeHandler != nil {
-			return subtreeHandler, params, deepness
+			return subtreeHandler, params, subtreeDepth
 		}
 		return defaultNotFoundHandler, params, 0
 	}

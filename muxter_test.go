@@ -1,73 +1,73 @@
 package muxter
 
 import (
-	"io"
-	"net/http"
 	"net/http/httptest"
 	"testing"
 )
 
 func TestRouting(t *testing.T) {
-
 	mux := New()
 
-	mux.HandleFunc("/api/v1/books", func(rw http.ResponseWriter, r *http.Request) {
-		io.WriteString(rw, "books")
-	})
+	defaultHandler := new(HandlerMock)
+	subdirHandler := new(HandlerMock)
 
-	mux.HandleFunc("/api/v1/books/", func(rw http.ResponseWriter, r *http.Request) {
-		io.WriteString(rw, "books subtree")
-	})
+	resetHandlers := func() {
+		*defaultHandler = HandlerMock{}
+		*subdirHandler = HandlerMock{}
+	}
+
+	mux.Handle("/api/v1/books", defaultHandler)
+	mux.Handle("/api/v1/books/", subdirHandler)
+	mux.Handle("/resource/:resourceID/subresource/:subID", defaultHandler)
 
 	testCases := []struct {
-		Name     string
-		Method   string
-		URL      string
-		Expected string
+		Name           string
+		URL            string
+		InvokedHandler *HandlerMock
+		ExpectedParams map[string]string
 	}{
 		{
-			Name:     "gets fixed route",
-			Method:   "GET",
-			URL:      "/api/v1/books",
-			Expected: "books",
+			Name:           "gets fixed route",
+			URL:            "/api/v1/books",
+			InvokedHandler: defaultHandler,
 		},
 		{
-			Name:     "get subtree route",
-			Method:   "GET",
-			URL:      "/api/v1/books/cats_cradle",
-			Expected: "books subtree",
+			Name:           "get subtree route",
+			URL:            "/api/v1/books/cats_cradle",
+			InvokedHandler: subdirHandler,
+		},
+		{
+			Name:           "match params",
+			URL:            "/resource/my_resource/subresource/my_sub",
+			InvokedHandler: defaultHandler,
+			ExpectedParams: map[string]string{
+				"resourceID": "my_resource",
+				"subID":      "my_sub",
+			},
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.Name, func(t *testing.T) {
+			resetHandlers()
 
-			req := httptest.NewRequest(tc.Method, tc.URL, nil)
-			rw := httptest.NewRecorder()
+			mux.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", tc.URL, nil))
 
-			mux.ServeHTTP(rw, req)
+			if count := len(tc.InvokedHandler.ServeHTTPCalls()); count != 1 {
+				t.Fatalf("expected handler to be invoked once but was invoked %d times", count)
+			}
 
-			if actual := rw.Body.String(); actual != tc.Expected {
-				t.Fatalf("expected %q but got %q", tc.Expected, actual)
+			req := tc.InvokedHandler.ServeHTTPCalls()[0].Request
+			for key, expected := range tc.ExpectedParams {
+				if actual := Param(req, key); actual != expected {
+					t.Errorf("expected parameter %q to be %q but got %q", key, expected, actual)
+				}
+			}
+
+			params, _ := req.Context().Value(paramKey).(map[string]string)
+			if len(params) != len(tc.ExpectedParams) {
+				t.Errorf("expected %d path parameters but got: %d", len(tc.ExpectedParams), len(params))
 			}
 		})
-	}
-}
-
-func TestParamsMatching(t *testing.T) {
-	mux := New()
-
-	mux.HandleFunc("/resource/:id/key/:key", func(rw http.ResponseWriter, r *http.Request) {
-		id, key := Param(r, "id"), Param(r, "key")
-		io.WriteString(rw, id+" "+key)
-	})
-
-	req := httptest.NewRequest("GET", "/resource/1/key/2", nil)
-	rw := httptest.NewRecorder()
-
-	mux.ServeHTTP(rw, req)
-
-	if actual := rw.Body.String(); actual != "1 2" {
-		t.Fatalf("expected %q but got %q", "1 2", actual)
 	}
 }

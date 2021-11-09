@@ -15,7 +15,7 @@ var defaultNotFoundHandler http.HandlerFunc = func(rw http.ResponseWriter, r *ht
 
 var redirectToSubdirHandler http.HandlerFunc = func(rw http.ResponseWriter, r *http.Request) {
 	rw.Header().Set("Location", r.URL.Path+"/")
-	rw.WriteHeader(http.StatusPermanentRedirect)
+	rw.WriteHeader(http.StatusMovedPermanently)
 }
 
 type node struct {

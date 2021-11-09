@@ -1,6 +1,7 @@
 package muxter
 
 import (
+	"net/http"
 	"net/http/httptest"
 	"testing"
 )
@@ -70,4 +71,25 @@ func TestRouting(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestSubdirRedirect(t *testing.T) {
+	mux := New()
+	mux.HandleFunc("/dir/", func(rw http.ResponseWriter, r *http.Request) {})
+
+	rw, r := httptest.NewRecorder(), httptest.NewRequest("POST", "/dir", nil)
+
+	mux.ServeHTTP(rw, r)
+
+	if rw.Code != 301 {
+		t.Errorf("expected status code to be 301 but got %d", rw.Code)
+	}
+
+	if location := rw.Header().Get("Location"); location != "/dir/" {
+		t.Errorf("expected location to be %q but got %q", "/dir/", location)
+	}
+}
+
+func TestMiddleware(t *testing.T) {
+
 }

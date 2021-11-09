@@ -11,13 +11,13 @@ func TestRouting(t *testing.T) {
 
 	mux := New()
 
-	mux.Get("/api/v1/books", http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/books", func(rw http.ResponseWriter, r *http.Request) {
 		io.WriteString(rw, "books")
-	}))
+	})
 
-	mux.Get("/api/v1/books/", http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/books/", func(rw http.ResponseWriter, r *http.Request) {
 		io.WriteString(rw, "books subtree")
-	}))
+	})
 
 	testCases := []struct {
 		Name     string
@@ -57,10 +57,10 @@ func TestRouting(t *testing.T) {
 func TestParamsMatching(t *testing.T) {
 	mux := New()
 
-	mux.Get("/resource/:id/key/:key", http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/resource/:id/key/:key", func(rw http.ResponseWriter, r *http.Request) {
 		id, key := Param(r, "id"), Param(r, "key")
 		io.WriteString(rw, id+" "+key)
-	}))
+	})
 
 	req := httptest.NewRequest("GET", "/resource/1/key/2", nil)
 	rw := httptest.NewRecorder()

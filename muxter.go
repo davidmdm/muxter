@@ -81,55 +81,19 @@ func (n *node) lookup(url string) (handler http.Handler, params map[string]strin
 }
 
 type Mux struct {
-	get, post, patch, put, delete node
+	root node
 }
 
 func New() *Mux {
 	return &Mux{}
 }
 
-func (m *Mux) Get(pattern string, handler http.Handler) {
-	m.add("get", pattern, handler)
+func (m *Mux) HandleFunc(pattern string, handler http.HandlerFunc) {
+	m.Handle(pattern, handler)
 }
 
-func (m *Mux) Post(pattern string, handler http.Handler) {
-	m.add("post", pattern, handler)
-}
-
-func (m *Mux) Patch(pattern string, handler http.Handler) {
-	m.add("patch", pattern, handler)
-}
-
-func (m *Mux) Put(pattern string, handler http.Handler) {
-	m.add("put", pattern, handler)
-}
-
-func (m *Mux) Delete(pattern string, handler http.Handler) {
-	m.add("delete", pattern, handler)
-}
-
-func (m *Mux) GetFunc(pattern string, handler http.HandlerFunc) {
-	m.add("get", pattern, handler)
-}
-
-func (m *Mux) PostFunc(pattern string, handler http.HandlerFunc) {
-	m.add("post", pattern, handler)
-}
-
-func (m *Mux) PatchFunc(pattern string, handler http.HandlerFunc) {
-	m.add("patch", pattern, handler)
-}
-
-func (m *Mux) PutFunc(pattern string, handler http.HandlerFunc) {
-	m.add("put", pattern, handler)
-}
-
-func (m *Mux) DeleteFunc(pattern string, handler http.HandlerFunc) {
-	m.add("delete", pattern, handler)
-}
-
-func (m *Mux) add(method, pattern string, fn http.Handler) {
-	n := m.methodToNode(method)
+func (m *Mux) Handle(pattern string, handler http.Handler) {
+	n := &m.root
 
 	var key string
 	pattern = cleanPath(pattern)
@@ -162,9 +126,9 @@ func (m *Mux) add(method, pattern string, fn http.Handler) {
 		}
 
 		if pattern == "/" {
-			n.subtreeHandler = fn
+			n.subtreeHandler = handler
 		} else {
-			n.fixedHandler = fn
+			n.fixedHandler = handler
 		}
 
 		return
@@ -172,26 +136,8 @@ func (m *Mux) add(method, pattern string, fn http.Handler) {
 }
 
 func (m Mux) lookupHandler(method, url string) (http.Handler, map[string]string) {
-	n := m.methodToNode(method)
-	handler, params, _ := n.lookup(url)
+	handler, params, _ := m.root.lookup(url)
 	return handler, params
-}
-
-func (m *Mux) methodToNode(method string) *node {
-	switch strings.ToLower(method) {
-	case "get":
-		return &m.get
-	case "post":
-		return &m.post
-	case "patch":
-		return &m.patch
-	case "put":
-		return &m.put
-	case "delete":
-		return &m.delete
-	default:
-		panic("muxter: mux.methodToNode: invalid method: " + method)
-	}
 }
 
 type paramKeyType int

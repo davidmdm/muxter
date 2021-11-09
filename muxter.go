@@ -13,6 +13,11 @@ var defaultNotFoundHandler http.HandlerFunc = func(rw http.ResponseWriter, r *ht
 	http.Error(rw, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 }
 
+var redirectToSubdirHandler http.HandlerFunc = func(rw http.ResponseWriter, r *http.Request) {
+	rw.Header().Set("Location", r.URL.Path+"/")
+	rw.WriteHeader(http.StatusPermanentRedirect)
+}
+
 type node struct {
 	wildcards      map[string]*node
 	children       map[string]*node
@@ -43,13 +48,14 @@ func (n *node) lookup(url string) (handler http.Handler, params map[string]strin
 			}
 
 			var handler http.Handler
-			var card string
+			var param string
 			max := -1
+
 			for wildcard, wildNode := range n.wildcards {
 				h, p, c := wildNode.lookup(url)
 				if c > max {
 					handler, params, max = h, p, c
-					card = wildcard
+					param = wildcard
 				}
 			}
 
@@ -57,7 +63,7 @@ func (n *node) lookup(url string) (handler http.Handler, params map[string]strin
 				if params == nil {
 					params = make(map[string]string)
 				}
-				params[card] = key
+				params[param] = key
 
 				return handler, params, maxUrlLength - len(url) + max
 			}
@@ -69,13 +75,19 @@ func (n *node) lookup(url string) (handler http.Handler, params map[string]strin
 			return defaultNotFoundHandler, params, 0
 		}
 
-		if url == "" && n.fixedHandler != nil {
-			return n.fixedHandler, params, maxUrlLength
+		if url == "" {
+			if n.fixedHandler != nil {
+				return n.fixedHandler, params, maxUrlLength
+			}
+			if h, _, _ := n.lookup("/"); h != nil {
+				return redirectToSubdirHandler, params, maxUrlLength
+			}
 		}
 
 		if subtreeHandler != nil {
 			return subtreeHandler, params, subtreeDepth
 		}
+
 		return defaultNotFoundHandler, params, 0
 	}
 }

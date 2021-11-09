@@ -109,21 +109,7 @@ func (m *Mux) Delete(pattern string, handler http.Handler) {
 }
 
 func (m *Mux) add(method, pattern string, fn http.Handler) {
-	var n *node
-	switch method {
-	case "get":
-		n = &m.get
-	case "post":
-		n = &m.post
-	case "patch":
-		n = &m.patch
-	case "put":
-		n = &m.put
-	case "delete":
-		n = &m.delete
-	default:
-		panic("muxter: mux.add: invalid method: " + method)
-	}
+	n := m.methodToNode(method)
 
 	var key string
 	pattern = cleanPath(pattern)
@@ -166,24 +152,26 @@ func (m *Mux) add(method, pattern string, fn http.Handler) {
 }
 
 func (m Mux) lookupHandler(method, url string) (http.Handler, map[string]string) {
-	var n node
-	switch strings.ToLower(method) {
-	case "get":
-		n = m.get
-	case "post":
-		n = m.post
-	case "patch":
-		n = m.patch
-	case "put":
-		n = m.put
-	case "delete":
-		n = m.delete
-	default:
-		panic("muxter: mux.lookupHandler: invalid method: " + method)
-	}
-
+	n := m.methodToNode(method)
 	handler, params, _ := n.lookup(url)
 	return handler, params
+}
+
+func (m *Mux) methodToNode(method string) *node {
+	switch strings.ToLower(method) {
+	case "get":
+		return &m.get
+	case "post":
+		return &m.post
+	case "patch":
+		return &m.patch
+	case "put":
+		return &m.put
+	case "delete":
+		return &m.delete
+	default:
+		panic("muxter: mux.methodToNode: invalid method: " + method)
+	}
 }
 
 type paramKeyType int

@@ -5,6 +5,7 @@ import (
 	"strings"
 )
 
+// Middleware is a function that takes a handler and modifies its behaviour by returning a new handler
 type Middleware func(http.Handler) http.Handler
 
 func withMiddleware(handler http.Handler, middlewares ...Middleware) http.Handler {
@@ -14,6 +15,8 @@ func withMiddleware(handler http.Handler, middlewares ...Middleware) http.Handle
 	return handler
 }
 
+// Method takes an method string as an argument and returns a middleware that checks if the request method
+// matches the provided method. If the check fails a 405 is returned. The check is case insensitive.
 func Method(method string) Middleware {
 	method = strings.ToUpper(method)
 	return func(h http.Handler) http.Handler {

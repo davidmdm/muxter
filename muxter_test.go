@@ -90,6 +90,68 @@ func TestSubdirRedirect(t *testing.T) {
 	}
 }
 
-func TestMiddleware(t *testing.T) {
+func TestMethodMiddleware(t *testing.T) {
+	mux := New()
+	handler := new(HandlerMock)
 
+	mux.Handle("/", handler, Method("GET"))
+
+	rw := httptest.NewRecorder()
+	r := httptest.NewRequest("POST", "/path", nil)
+
+	mux.ServeHTTP(rw, r)
+
+	if len(handler.ServeHTTPCalls()) > 0 {
+		t.Fatalf("expected handler to not be called but was")
+	}
+
+	if rw.Code != 405 {
+		t.Fatalf("expected code to be 405 but got: %d", rw.Code)
+	}
+}
+
+func TestMiddlewareCompisition(t *testing.T) {
+	var (
+		m1 Middleware = func(h http.Handler) http.Handler {
+			return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+				rw.Header().Set("m1", "m1")
+				h.ServeHTTP(rw, r)
+			})
+		}
+		m2 Middleware = func(h http.Handler) http.Handler {
+			return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+				rw.Header().Set("m2", "m2")
+				h.ServeHTTP(rw, r)
+			})
+		}
+		m3 Middleware = func(h http.Handler) http.Handler {
+			return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+				rw.Header().Set("m1", "m3")
+				rw.Header().Set("m3", "m3")
+				h.ServeHTTP(rw, r)
+			})
+		}
+	)
+
+	mux := New()
+	handler := new(HandlerMock)
+
+	mux.Handle("/", handler, m1, m2, m3)
+
+	rw := httptest.NewRecorder()
+	r := httptest.NewRequest("POST", "/path", nil)
+
+	mux.ServeHTTP(rw, r)
+
+	expectedHeaders := map[string]string{
+		"m1": "m3",
+		"m2": "m2",
+		"m3": "m3",
+	}
+
+	for key, expected := range expectedHeaders {
+		if actual := rw.Header().Get(key); actual != expected {
+			t.Errorf("expected header %q to have value %q but got %q", key, expected, actual)
+		}
+	}
 }

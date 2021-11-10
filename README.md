@@ -17,6 +17,7 @@ and that makes it just not viable to use for anything other than play.
 So why muxter?
 
 - It aims to route and work exactly as the standard library's http.ServeMux.
+- It matches path params.
 - It's small.
 - It's a hundred percent standard library compatible.
 
@@ -37,33 +38,35 @@ Small ones.
 package main
 
 import (
-    "io"
-    "net/http"
-    "github.com/davidmdm/muxter"
+	"io"
+	"net/http"
+
+	"github.com/davidmdm/muxter"
 )
 
 func main() {
-    mux := muxter.New()
+	mux := muxter.New()
 
-    mux.HandleFunc("/", func(rw http.ResponseWriter, r *http.Request) {
-        io.WriteString("hello world!")
-    })
+	mux.HandleFunc("/", func(rw http.ResponseWriter, r *http.Request) {
+		io.WriteString(rw, "hello world!")
+	})
 
-    // muxter matches path params
-    mux.HandleFunc("/resource/:id", func(rw http.ResponseWriter, r *http.Request) {
-        id := muxter.Param("id")
-        io.WriteString(id)
-    })
+	// muxter matches path params
+	mux.HandleFunc("/resource/:id", func(rw http.ResponseWriter, r *http.Request) {
+		id := muxter.Param(r, "id")
+		io.WriteString(rw, id)
+	})
 
-    // muxter accepts middlewares and provides basic ones for Method matching.
-    mux.HandleFunc(
-        "/resource",
-        func(rw http.ResponseWriter, r *http.Request) {
-            io.WriteString("hello world!")
-        },
-        muxter.POST,
-    )
+	// muxter accepts middlewares and provides basic ones for Method matching.
+	mux.HandleFunc(
+		"/resource",
+		func(rw http.ResponseWriter, r *http.Request) {
+			io.WriteString(rw, "hello world!")
+		},
+		muxter.POST,
+	)
 
-    http.ListenAndServe(":8080", mux)
+	http.ListenAndServe(":8080", mux)
 }
+
 ```

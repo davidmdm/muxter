@@ -1,6 +1,7 @@
 package muxter
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -187,5 +188,42 @@ func TestUseMiddleware(t *testing.T) {
 
 	if xMiddleware := rw.Header().Get("x-middleware"); xMiddleware != "ok" {
 		t.Errorf("expected middle to be called on post-use and set x-middleware to %q but got %q", "ok", xMiddleware)
+	}
+}
+
+func TestCustomNotFoundHandler(t *testing.T) {
+	mux := New()
+
+	rw := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/somewhere", nil)
+
+	mux.ServeHTTP(rw, r)
+
+	if rw.Code != 404 {
+		t.Errorf("expected status code to be 404 but got %d", rw.Code)
+	}
+
+	expectedBody := http.StatusText(404) + "\n"
+	if body := rw.Body.String(); body != expectedBody {
+		t.Errorf("expected body to be %q but got %q", expectedBody, body)
+	}
+
+	mux.NotFoundHandler = func(rw http.ResponseWriter, r *http.Request) {
+		rw.WriteHeader(404)
+		io.WriteString(rw, "you are lost buddy!")
+	}
+
+	rw = httptest.NewRecorder()
+	r = httptest.NewRequest("GET", "/somewhere", nil)
+
+	mux.ServeHTTP(rw, r)
+
+	if rw.Code != 404 {
+		t.Errorf("expected status code to be 404 but got %d", rw.Code)
+	}
+
+	expectedBody = "you are lost buddy!"
+	if body := rw.Body.String(); body != expectedBody {
+		t.Errorf("expected body to be %q but got %q", expectedBody, body)
 	}
 }

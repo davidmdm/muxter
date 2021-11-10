@@ -96,6 +96,10 @@ func (n *node) lookup(url string) (handler http.Handler, params map[string]strin
 type Mux struct {
 	root        node
 	middlewares []Middleware
+
+	// NotFoundHandler will be called if no registered route has been matched for a given request.
+	// if NotFoundHandler is nil a default NotFoundHandler will be used instead simply returning 404 and the default http.StatusText(404) as body.
+	NotFoundHandler http.HandlerFunc
 }
 
 // New returns a pointer to a new muxter.Mux
@@ -108,7 +112,11 @@ func (m Mux) ServeHTTP(res http.ResponseWriter, req *http.Request) {
 	handler, params, _ := m.root.lookup(cleanPath(req.URL.Path))
 
 	if handler == nil {
-		handler = defaultNotFoundHandler
+		if m.NotFoundHandler != nil {
+			handler = m.NotFoundHandler
+		} else {
+			handler = defaultNotFoundHandler
+		}
 	}
 
 	if params != nil {

@@ -53,7 +53,7 @@ func (n *node) lookup(url string) (handler http.Handler, params map[string]strin
 
 			for wildcard, wildNode := range n.wildcards {
 				h, p, c := wildNode.lookup(url)
-				if c > max {
+				if h != nil && c > max {
 					handler, params, max = h, p, c
 					param = wildcard
 				}
@@ -72,7 +72,7 @@ func (n *node) lookup(url string) (handler http.Handler, params map[string]strin
 				return subtreeHandler, params, subtreeDepth
 			}
 
-			return defaultNotFoundHandler, params, 0
+			return nil, nil, 0
 		}
 
 		if url == "" {
@@ -88,7 +88,7 @@ func (n *node) lookup(url string) (handler http.Handler, params map[string]strin
 			return subtreeHandler, params, subtreeDepth
 		}
 
-		return defaultNotFoundHandler, params, 0
+		return nil, nil, 0
 	}
 }
 
@@ -105,6 +105,10 @@ func New() *Mux {
 // ServeHTTP implements the net/http Handler interface.
 func (m Mux) ServeHTTP(res http.ResponseWriter, req *http.Request) {
 	handler, params, _ := m.root.lookup(cleanPath(req.URL.Path))
+
+	if handler == nil {
+		handler = defaultNotFoundHandler
+	}
 
 	if params != nil {
 		ctx := context.WithValue(req.Context(), paramKey, params)

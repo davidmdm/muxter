@@ -14,10 +14,6 @@ func withMiddleware(handler http.Handler, middlewares ...Middleware) http.Handle
 	return handler
 }
 
-func WithMiddlewareFunc(handler http.HandlerFunc, middlewares ...Middleware) http.Handler {
-	return withMiddleware(handler, middlewares...)
-}
-
 func Method(method string) Middleware {
 	method = strings.ToUpper(method)
 	return func(h http.Handler) http.Handler {

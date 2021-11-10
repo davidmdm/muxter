@@ -155,3 +155,37 @@ func TestMiddlewareCompisition(t *testing.T) {
 		}
 	}
 }
+
+func TestUseMiddleware(t *testing.T) {
+	mux := New()
+	handler := new(HandlerMock)
+
+	mux.Handle("/pre-use", handler)
+
+	mux.Use(func(h http.Handler) http.Handler {
+		return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+			rw.Header().Set("x-middleware", "ok")
+			h.ServeHTTP(rw, r)
+		})
+	})
+
+	mux.Handle("/post-use", handler)
+
+	rw := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/pre-use", nil)
+
+	mux.ServeHTTP(rw, r)
+
+	if xMiddleware := rw.Header().Get("x-middleware"); xMiddleware != "" {
+		t.Errorf("expected middle to not be called on pre-use but got %q", xMiddleware)
+	}
+
+	rw = httptest.NewRecorder()
+	r = httptest.NewRequest("GET", "/post-use", nil)
+
+	mux.ServeHTTP(rw, r)
+
+	if xMiddleware := rw.Header().Get("x-middleware"); xMiddleware != "ok" {
+		t.Errorf("expected middle to be called on post-use and set x-middleware to %q but got %q", "ok", xMiddleware)
+	}
+}

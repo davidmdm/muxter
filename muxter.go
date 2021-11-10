@@ -94,7 +94,8 @@ func (n *node) lookup(url string) (handler http.Handler, params map[string]strin
 
 // Mux is a request multiplexer with the same routing behaviour as the standard libraries net/http ServeMux
 type Mux struct {
-	root node
+	root        node
+	middlewares []Middleware
 }
 
 // New returns a pointer to a new muxter.Mux
@@ -118,6 +119,13 @@ func (m Mux) ServeHTTP(res http.ResponseWriter, req *http.Request) {
 	handler.ServeHTTP(res, req)
 }
 
+// Use registers global middlewares for your routes. Only routes registered after the call to use will be affected
+// by a call to Use. Middlewares will be invoked such that the first middleware will have its effect run before the second
+// and so forth.
+func (m *Mux) Use(middlewares ...Middleware) {
+	m.middlewares = append(m.middlewares, middlewares...)
+}
+
 // HandleFunc registers a net/http HandlerFunc for a given string pattern. Middlewares are applied
 // such that the first middleware will be called before passing control to the next middleware.
 // ie mux.HandleFunc(pattern, handler, m1, m2, m3) => request flow will pass through m1 then m2 then m3.
@@ -129,7 +137,7 @@ func (m *Mux) HandleFunc(pattern string, handler http.HandlerFunc, middlewares .
 // such that the first middleware will be called before passing control to the next middleware.
 // ie mux.HandleFunc(pattern, handler, m1, m2, m3) => request flow will pass through m1 then m2 then m3.
 func (m *Mux) Handle(pattern string, handler http.Handler, middlewares ...Middleware) {
-	handler = withMiddleware(handler, middlewares...)
+	handler = withMiddleware(handler, append(m.middlewares, middlewares...)...)
 
 	n := &m.root
 

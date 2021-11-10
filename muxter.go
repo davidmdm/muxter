@@ -20,7 +20,7 @@ var redirectToSubdirHandler http.HandlerFunc = func(rw http.ResponseWriter, r *h
 
 type node struct {
 	wildcards      map[string]*node
-	children       map[string]*node
+	segments       map[string]*node
 	fixedHandler   http.Handler
 	subtreeHandler http.Handler
 }
@@ -40,8 +40,8 @@ func (n *node) lookup(url string) (handler http.Handler, params map[string]strin
 
 		key, url = split(url)
 		if key != "" {
-			if n.children != nil {
-				if next, ok := n.children[key]; ok {
+			if n.segments != nil {
+				if next, ok := n.segments[key]; ok {
 					n = next
 					continue
 				}
@@ -143,15 +143,15 @@ func (m *Mux) Handle(pattern string, handler http.Handler, middlewares ...Middle
 				nodeMap = n.wildcards
 				key = key[1:]
 			} else {
-				if n.children == nil {
-					n.children = make(map[string]*node)
+				if n.segments == nil {
+					n.segments = make(map[string]*node)
 				}
-				nodeMap = n.children
+				nodeMap = n.segments
 			}
 
 			next, ok := nodeMap[key]
 			if !ok {
-				next = &node{}
+				next = new(node)
 				nodeMap[key] = next
 			}
 			n = next

@@ -53,23 +53,25 @@ func TestRouting(t *testing.T) {
 		t.Run(tc.Name, func(t *testing.T) {
 			resetHandlers()
 
+			tc.InvokedHandler.ServeHTTPFunc = func(responseWriter http.ResponseWriter, request *http.Request) {
+				for key, expected := range tc.ExpectedParams {
+					if actual := Param(request, key); actual != expected {
+						t.Errorf("expected parameter %q to be %q but got %q", key, expected, actual)
+					}
+				}
+
+				params, _ := request.Context().Value(paramKey).(map[string]string)
+				if len(params) != len(tc.ExpectedParams) {
+					t.Errorf("expected %d path parameters but got: %d", len(tc.ExpectedParams), len(params))
+				}
+			}
+
 			mux.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", tc.URL, nil))
 
 			if count := len(tc.InvokedHandler.ServeHTTPCalls()); count != 1 {
 				t.Fatalf("expected handler to be invoked once but was invoked %d times", count)
 			}
 
-			req := tc.InvokedHandler.ServeHTTPCalls()[0].Request
-			for key, expected := range tc.ExpectedParams {
-				if actual := Param(req, key); actual != expected {
-					t.Errorf("expected parameter %q to be %q but got %q", key, expected, actual)
-				}
-			}
-
-			params, _ := req.Context().Value(paramKey).(map[string]string)
-			if len(params) != len(tc.ExpectedParams) {
-				t.Errorf("expected %d path parameters but got: %d", len(tc.ExpectedParams), len(params))
-			}
 		})
 	}
 }

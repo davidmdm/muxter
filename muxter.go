@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"path"
 	"strings"
+	"sync"
 )
 
 var _ http.Handler = Mux{}
@@ -16,6 +17,36 @@ var defaultNotFoundHandler http.HandlerFunc = func(rw http.ResponseWriter, r *ht
 var redirectToSubdirHandler http.HandlerFunc = func(rw http.ResponseWriter, r *http.Request) {
 	rw.Header().Set("Location", r.URL.Path+"/")
 	rw.WriteHeader(http.StatusMovedPermanently)
+}
+
+type paramPool struct {
+	pool *sync.Pool
+}
+
+func (p paramPool) Get() map[string]string {
+	return p.pool.Get().(map[string]string)
+}
+
+func (p paramPool) Put(params map[string]string) {
+	if params == nil {
+		return
+	}
+	for k := range params {
+		delete(params, k)
+	}
+	p.pool.Put(params)
+}
+
+var pool = newParamPool()
+
+func newParamPool() paramPool {
+	return paramPool{
+		pool: &sync.Pool{
+			New: func() interface{} {
+				return make(map[string]string)
+			},
+		},
+	}
 }
 
 type node struct {
@@ -61,7 +92,7 @@ func (n *node) lookup(url string) (handler http.Handler, params map[string]strin
 
 			if handler != nil {
 				if params == nil {
-					params = make(map[string]string)
+					params = pool.Get()
 				}
 				params[param] = key
 
@@ -110,6 +141,7 @@ func New() *Mux {
 // ServeHTTP implements the net/http Handler interface.
 func (m Mux) ServeHTTP(res http.ResponseWriter, req *http.Request) {
 	handler, params, _ := m.root.lookup(cleanPath(req.URL.Path))
+	defer pool.Put(params)
 
 	if handler == nil {
 		if m.NotFoundHandler != nil {

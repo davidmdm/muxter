@@ -229,3 +229,106 @@ func TestCustomNotFoundHandler(t *testing.T) {
 		t.Errorf("expected body to be %q but got %q", expectedBody, body)
 	}
 }
+
+func TestRegisterMux(t *testing.T) {
+	child := New()
+
+	child.HandleFunc(
+		"/child",
+		func(rw http.ResponseWriter, r *http.Request) {},
+		func(h http.Handler) http.Handler {
+			return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+				rw.Header().Set("child_header_1", "child_header_1")
+				rw.Header().Set("parent_header_1", "child_header_1")
+				h.ServeHTTP(rw, r)
+			})
+		},
+	)
+
+	parent := New()
+
+	parent.Use(
+		func(h http.Handler) http.Handler {
+			return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+				rw.Header().Set("parent_header_1", "parent_header_1")
+				rw.Header().Set("parent_header_2", "parent_header_2")
+				h.ServeHTTP(rw, r)
+			})
+		},
+	)
+
+	parent.HandleFunc("/parent", func(rw http.ResponseWriter, r *http.Request) {})
+	parent.RegisterMux("/registered", child)
+
+	rw, r := httptest.NewRecorder(), httptest.NewRequest("GET", "/parent", nil)
+
+	parent.ServeHTTP(rw, r)
+
+	expectedHeaders := map[string]string{
+		"parent_header_1": "parent_header_1",
+		"parent_header_2": "parent_header_2",
+	}
+
+	for key, expected := range expectedHeaders {
+		if actual := rw.Header().Get(key); actual != expected {
+			t.Errorf("expected /parent request to set header %q to %q but got %q", key, expected, actual)
+		}
+	}
+
+	if len(rw.Header()) != len(expectedHeaders) {
+		t.Errorf("expected response headers to have length %d but got %d", len(expectedHeaders), len(rw.Header()))
+	}
+
+	rw, r = httptest.NewRecorder(), httptest.NewRequest("GET", "/registered/child", nil)
+
+	parent.ServeHTTP(rw, r)
+
+	expectedHeaders = map[string]string{
+		"child_header_1":  "child_header_1",
+		"parent_header_1": "child_header_1",
+		"parent_header_2": "parent_header_2",
+	}
+
+	for key, expected := range expectedHeaders {
+		if actual := rw.Header().Get(key); actual != expected {
+			t.Errorf("expected /parent request to set header %q to %q but got %q", key, expected, actual)
+		}
+	}
+
+	if len(rw.Header()) != len(expectedHeaders) {
+		t.Errorf("expected response headers to have length %d but got %d", len(expectedHeaders), len(rw.Header()))
+	}
+}
+
+func TestRegisterMuxParams(t *testing.T) {
+	child := New()
+
+	expectedParams := map[string]string{
+		"rootID":  "1",
+		"childID": "2",
+	}
+
+	handler := &HandlerMock{
+		ServeHTTPFunc: func(responseWriter http.ResponseWriter, request *http.Request) {
+			for key, expected := range expectedParams {
+				if actual := Param(request, key); actual != expected {
+					t.Errorf("expected param %q to be %q but got %q", key, expected, actual)
+				}
+			}
+		},
+	}
+
+	child.Handle("/child/:childID", handler)
+
+	root := New()
+
+	root.RegisterMux("/root/:rootID", child)
+
+	rw, r := httptest.NewRecorder(), httptest.NewRequest("GET", "/root/1/child/2", nil)
+
+	root.ServeHTTP(rw, r)
+
+	if count := len(handler.ServeHTTPCalls()); count != 1 {
+		t.Fatalf("expected handler to be called once but was called %d times", count)
+	}
+}

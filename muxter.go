@@ -213,85 +213,55 @@ func (m *Mux) HandleFunc(pattern string, handler http.HandlerFunc, middlewares .
 func (m *Mux) Handle(pattern string, handler http.Handler, middlewares ...Middleware) {
 	handler = withMiddleware(handler, append(m.middlewares, middlewares...)...)
 
-	n := &m.root
+	node, remainder := m.root.traverse(pattern)
 
-	var key string
-	pattern = cleanPath(pattern)
-
-	for {
-		key, pattern = split(pattern)
-		if key != "" {
-			var nodeMap map[string]*node
-			if key[0] == ':' {
-				if n.wildcards == nil {
-					n.wildcards = make(map[string]*node)
-				}
-				nodeMap = n.wildcards
-				key = key[1:]
-			} else {
-				if n.segments == nil {
-					n.segments = make(map[string]*node)
-				}
-				nodeMap = n.segments
-			}
-
-			next, ok := nodeMap[key]
-			if !ok {
-				next = new(node)
-				nodeMap[key] = next
-			}
-			n = next
-
-			continue
-		}
-
-		if pattern == "/" {
-			n.subtreeHandler = handler
-		} else {
-			n.fixedHandler = handler
-		}
-
-		return
+	if remainder == "/" {
+		node.subtreeHandler = handler
+	} else {
+		node.fixedHandler = handler
 	}
 }
 
+// RegisterMux registers a mux at a given pattern. This allows for mux's to be composed.
+// Middlewares are called in this order: parent global middlewares, middlewares passed here, child mux global middlewares and child middlewares.
 func (m *Mux) RegisterMux(pattern string, mux *Mux, middlewares ...Middleware) {
-	n := &m.root
+	n, _ := m.root.traverse(pattern)
+	n.merge(&mux.root, append(m.middlewares, middlewares...)...)
+}
 
+func (n *node) traverse(pattern string) (target *node, remainder string) {
 	var key string
 	pattern = cleanPath(pattern)
 
 	for {
 		key, pattern = split(pattern)
-		if key != "" {
-			var nodeMap map[string]*node
-			if key[0] == ':' {
-				if n.wildcards == nil {
-					n.wildcards = make(map[string]*node)
-				}
-				nodeMap = n.wildcards
-				key = key[1:]
-			} else {
-				if n.segments == nil {
-					n.segments = make(map[string]*node)
-				}
-				nodeMap = n.segments
-			}
-
-			next, ok := nodeMap[key]
-			if !ok {
-				next = new(node)
-				nodeMap[key] = next
-			}
-			n = next
-
-			continue
+		if key == "" {
+			break
 		}
 
-		n.merge(&mux.root, middlewares...)
+		var nodeMap map[string]*node
+		if key[0] == ':' {
+			if n.wildcards == nil {
+				n.wildcards = make(map[string]*node)
+			}
+			nodeMap = n.wildcards
+			key = key[1:]
+		} else {
+			if n.segments == nil {
+				n.segments = make(map[string]*node)
+			}
+			nodeMap = n.segments
+		}
 
-		return
+		next, ok := nodeMap[key]
+		if !ok {
+			next = new(node)
+			nodeMap[key] = next
+		}
+		n = next
 	}
+
+	return n, pattern
 }
 
 type paramKeyType int

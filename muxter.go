@@ -123,6 +123,40 @@ func (n *node) lookup(url string) (handler http.Handler, params map[string]strin
 	}
 }
 
+func (n *node) merge(other *node, middlewares ...Middleware) *node {
+	if other.fixedHandler != nil {
+		n.fixedHandler = withMiddleware(other.fixedHandler, middlewares...)
+	}
+
+	if other.subtreeHandler != nil {
+		n.subtreeHandler = withMiddleware(other.subtreeHandler, middlewares...)
+	}
+
+	for segment, nextNode := range other.segments {
+		if n.segments == nil {
+			n.segments = make(map[string]*node)
+		}
+		if currentNode := n.segments[segment]; currentNode == nil {
+			n.segments[segment] = new(node).merge(nextNode, middlewares...)
+		} else {
+			currentNode.merge(nextNode, middlewares...)
+		}
+	}
+
+	for wildcard, nextNode := range other.wildcards {
+		if n.wildcards == nil {
+			n.wildcards = make(map[string]*node)
+		}
+		if currentNode := n.wildcards[wildcard]; currentNode == nil {
+			n.wildcards[wildcard] = new(node).merge(nextNode, middlewares...)
+		} else {
+			currentNode.merge(nextNode)
+		}
+	}
+
+	return n
+}
+
 // Mux is a request multiplexer with the same routing behaviour as the standard libraries net/http ServeMux
 type Mux struct {
 	root        node
@@ -216,6 +250,45 @@ func (m *Mux) Handle(pattern string, handler http.Handler, middlewares ...Middle
 		} else {
 			n.fixedHandler = handler
 		}
+
+		return
+	}
+}
+
+func (m *Mux) RegisterMux(pattern string, mux *Mux, middlewares ...Middleware) {
+	n := &m.root
+
+	var key string
+	pattern = cleanPath(pattern)
+
+	for {
+		key, pattern = split(pattern)
+		if key != "" {
+			var nodeMap map[string]*node
+			if key[0] == ':' {
+				if n.wildcards == nil {
+					n.wildcards = make(map[string]*node)
+				}
+				nodeMap = n.wildcards
+				key = key[1:]
+			} else {
+				if n.segments == nil {
+					n.segments = make(map[string]*node)
+				}
+				nodeMap = n.segments
+			}
+
+			next, ok := nodeMap[key]
+			if !ok {
+				next = new(node)
+				nodeMap[key] = next
+			}
+			n = next
+
+			continue
+		}
+
+		n.merge(&mux.root, middlewares...)
 
 		return
 	}

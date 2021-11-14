@@ -332,3 +332,38 @@ func TestRegisterMuxParams(t *testing.T) {
 		t.Fatalf("expected handler to be called once but was called %d times", count)
 	}
 }
+
+func TestRecoverMiddleware(t *testing.T) {
+
+	mux := New()
+
+	panicMsg := "I can't even right now..."
+
+	recoverMiddleware := Recover(func(recovered interface{}, rw http.ResponseWriter, r *http.Request) {
+		if recovered != panicMsg {
+			t.Errorf("expected recovery value to be: '%v' but got: '%v'", panicMsg, recovered)
+		}
+
+		rw.WriteHeader(500)
+		io.WriteString(rw, "calm down buddy.")
+	})
+
+	mux.Use(recoverMiddleware)
+
+	mux.HandleFunc("/", func(rw http.ResponseWriter, r *http.Request) {
+		panic(panicMsg)
+	})
+
+	rw, r := httptest.NewRecorder(), httptest.NewRequest("GET", "/anywhere", nil)
+
+	mux.ServeHTTP(rw, r)
+
+	if rw.Code != 500 {
+		t.Errorf("expected code to be 500 but got: %d", rw.Code)
+	}
+
+	expectedPayload := "calm down buddy."
+	if actual := rw.Body.String(); actual != expectedPayload {
+		t.Errorf("expected response body to be %q but got %q", expectedPayload, actual)
+	}
+}

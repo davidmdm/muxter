@@ -6,7 +6,7 @@ import (
 )
 
 // Middleware is a function that takes a handler and modifies its behaviour by returning a new handler
-type Middleware func(http.Handler) http.Handler
+type Middleware = func(http.Handler) http.Handler
 
 func withMiddleware(handler http.Handler, middlewares ...Middleware) http.Handler {
 	for i := len(middlewares) - 1; i >= 0; i-- {
@@ -37,3 +37,17 @@ var (
 	PUT    = Method("PUT")
 	DELETE = Method("DELETE")
 )
+
+func Recover(recoverHandler func(recovered interface{}, rw http.ResponseWriter, r *http.Request)) Middleware {
+	return func(h http.Handler) http.Handler {
+		return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+			defer func() {
+				if recovered := recover(); r != nil {
+					recoverHandler(recovered, rw, r)
+					return
+				}
+			}()
+			h.ServeHTTP(rw, r)
+		})
+	}
+}

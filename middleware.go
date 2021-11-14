@@ -32,8 +32,41 @@ func Method(method string) Middleware {
 	}
 }
 
+type headResponseWriter struct {
+	http.ResponseWriter
+	contentLength int
+}
+
+func (w *headResponseWriter) Write(b []byte) (int, error) {
+	w.contentLength += len(b)
+	return len(b), nil
+}
+
 var (
-	GET    = Method("GET")
+	// GET supports both GET and HEAD request methods and replaces the response writer with an writer
+	// the dumps the body if the method is HEAD, making it safe for get and head logic to be the same.
+	GET Middleware = func(h http.Handler) http.Handler {
+		return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+			method := strings.ToUpper(r.Method)
+
+			if method != "HEAD" && method != "GET" {
+				http.Error(rw, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+				return
+			}
+
+			if method == "HEAD" {
+				headWriter := &headResponseWriter{rw, 0}
+				defer func() {
+					if length := rw.Header().Get("Content-Length"); length == "" {
+						rw.Header().Set("Content-Length", strconv.Itoa(headWriter.contentLength))
+					}
+				}()
+				rw = headWriter
+			}
+
+			h.ServeHTTP(rw, r)
+		})
+	}
 	POST   = Method("POST")
 	PATCH  = Method("PATCH")
 	PUT    = Method("PUT")

@@ -38,8 +38,10 @@ var (
 	PATCH  = Method("PATCH")
 	PUT    = Method("PUT")
 	DELETE = Method("DELETE")
+	HEAD   = Method("HEAD")
 )
 
+// Recover allows you to register a handler function should a panic occur in the stack.
 func Recover(recoverHandler func(recovered interface{}, rw http.ResponseWriter, r *http.Request)) Middleware {
 	return func(h http.Handler) http.Handler {
 		return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
@@ -73,6 +75,7 @@ type AccessControlOptions struct {
 	AllowMethods     []string
 }
 
+// CORS creates a middleware for enabling CORS with browsers.
 func CORS(opts AccessControlOptions) Middleware {
 	if opts.AllowOrigin == "" {
 		opts.AllowOrigin = "*"
@@ -123,3 +126,9 @@ func CORS(opts AccessControlOptions) Middleware {
 		})
 	}
 }
+
+// DefaultCORS is a non restrictive configuration of the CORS middleware. It defaults to accepting
+// any origin for CORS requests, and accepting any set of preflight request headers. It does not
+// however default to AllowCredentials:true, therefore if making credentialed CORS requests you must
+// configure this via the standard CORS middleware function.
+var DefaultCORS = CORS(AccessControlOptions{})

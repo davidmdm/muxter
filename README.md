@@ -110,3 +110,33 @@ func main() {
 	http.ListenAndServe(":8080", mux)
 }
 ```
+
+## Middlewares
+
+Muxter provides a couple of convenience middlewares. Middlewares are defined as:
+
+```go
+type Middleware = func(http.Hander) http.Handler
+```
+
+Notice the type alias. This means that middlewares are not of a specific type of the muxter package,
+and any function that takes a handler and returns a handler is considered valid middleware.
+
+Muxter provides middlewares for guarding routes for specific Request Methods
+
+- muxter.GET
+- muxter.POST
+- muxter.DELETE
+- muxter.GET
+- muxter.PATCH
+- muxter.HEAD
+- muxter.Method(method string)
+
+A middleware from recovering from panics:
+
+- muxter.Recover(handler func(recovered interface{}, rw http.ResponseWriter, r \*http.Request))
+
+a middleware for enabling CORS
+
+- muxter.CORS(options muxter.AccessControlOptions)
+- muxter.DefaultCORS // a default permissive cors cofiguration

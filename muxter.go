@@ -14,6 +14,10 @@ var defaultNotFoundHandler http.HandlerFunc = func(rw http.ResponseWriter, r *ht
 	http.Error(rw, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 }
 
+var defaultMethodNotAllowedHandler http.HandlerFunc = func(rw http.ResponseWriter, r *http.Request) {
+	http.Error(rw, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+}
+
 var redirectToSubdirHandler http.HandlerFunc = func(rw http.ResponseWriter, r *http.Request) {
 	rw.Header().Set("Location", r.URL.Path+"/")
 	rw.WriteHeader(http.StatusMovedPermanently)
@@ -326,4 +330,50 @@ func split(pattern string) (head, rest string) {
 	}
 
 	return pattern[:idx], pattern[idx:]
+}
+
+type MethodHandler struct {
+	handlers                map[string]http.Handler
+	methodNotAllowedHandler http.Handler
+}
+
+func NewMethodHandler() *MethodHandler {
+	return &MethodHandler{}
+}
+
+func (mh *MethodHandler) AddMethodHandler(method string, handlerFunc http.Handler) *MethodHandler {
+	if mh.handlers == nil {
+		mh.handlers = make(map[string]http.Handler)
+	}
+	method = strings.ToUpper(method)
+	mh.handlers[method] = handlerFunc
+
+	return mh
+}
+
+func (mh *MethodHandler) AddMethodHandlerFunc(method string, handlerFunc http.HandlerFunc) *MethodHandler {
+	return mh.AddMethodHandler(method, handlerFunc)
+}
+
+func (mh *MethodHandler) SetMethodNotAllowedHandler(handler http.Handler) *MethodHandler {
+	mh.methodNotAllowedHandler = handler
+	return mh
+}
+
+func (mh *MethodHandler) SetMethodNotAllowedHandlerFunc(handler http.HandlerFunc) *MethodHandler {
+	return mh.SetMethodNotAllowedHandler(handler)
+}
+
+func (mh MethodHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
+	if h := mh.handlers[r.Method]; h != nil {
+		h.ServeHTTP(rw, r)
+		return
+	}
+
+	if h := mh.methodNotAllowedHandler; h != nil {
+		h.ServeHTTP(rw, r)
+		return
+	}
+
+	defaultMethodNotAllowedHandler(rw, r)
 }

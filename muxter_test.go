@@ -420,3 +420,73 @@ func TestGetMiddleware(t *testing.T) {
 		t.Errorf("expected statusCode to be 405 but got %d", rw.Code)
 	}
 }
+
+func TestMethodHandler(t *testing.T) {
+	mux := New()
+
+	methodHandler := NewMethodHandler().
+		AddMethodHandlerFunc("get", func(rw http.ResponseWriter, r *http.Request) {
+			io.WriteString(rw, "GET")
+		}).
+		AddMethodHandlerFunc("post", func(rw http.ResponseWriter, r *http.Request) {
+			io.WriteString(rw, "POST")
+		})
+
+	mux.Handle(
+		"/methods",
+		methodHandler,
+	)
+
+	// GET
+	rw, r := httptest.NewRecorder(), httptest.NewRequest("GET", "/methods", nil)
+
+	mux.ServeHTTP(rw, r)
+
+	expectedBody := "GET"
+	if body := rw.Body.String(); body != expectedBody {
+		t.Errorf("expected body to be %q but got %q", expectedBody, body)
+	}
+
+	// POST
+	rw, r = httptest.NewRecorder(), httptest.NewRequest("POST", "/methods", nil)
+
+	mux.ServeHTTP(rw, r)
+
+	expectedBody = "POST"
+	if body := rw.Body.String(); body != expectedBody {
+		t.Errorf("expected body to be %q but got %q", expectedBody, body)
+	}
+
+	// PUT NOT FOUND
+	rw, r = httptest.NewRecorder(), httptest.NewRequest("PUT", "/methods", nil)
+
+	mux.ServeHTTP(rw, r)
+
+	expectedBody = "Method Not Allowed\n"
+	if body := rw.Body.String(); body != expectedBody {
+		t.Errorf("expected body to be %q but got %q", expectedBody, body)
+	}
+
+	if rw.Code != 405 {
+		t.Errorf("expected statusCode to be 405 but got %d", rw.Code)
+	}
+
+	methodHandler.SetMethodNotAllowedHandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		rw.WriteHeader(405)
+		io.WriteString(rw, "YO YO YO NO")
+	})
+
+	// PUT NOT FOUND
+	rw, r = httptest.NewRecorder(), httptest.NewRequest("PUT", "/methods", nil)
+
+	mux.ServeHTTP(rw, r)
+
+	expectedBody = "YO YO YO NO"
+	if body := rw.Body.String(); body != expectedBody {
+		t.Errorf("expected body to be %q but got %q", expectedBody, body)
+	}
+
+	if rw.Code != 405 {
+		t.Errorf("expected statusCode to be 405 but got %d", rw.Code)
+	}
+}

@@ -141,7 +141,7 @@ func CORS(opts AccessControlOptions) Middleware {
 				rw.Header().Set("Access-Control-Allow-Credentials", "true")
 			}
 
-			if r.Method == "OPTIONS" {
+			if strings.ToUpper(r.Method) == "OPTIONS" {
 				if allowHeaders != "" {
 					rw.Header().Set("Access-Control-Allow-Headers", allowHeaders)
 				} else {

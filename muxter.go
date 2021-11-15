@@ -365,7 +365,7 @@ func (mh *MethodHandler) SetMethodNotAllowedHandlerFunc(handler http.HandlerFunc
 }
 
 func (mh MethodHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
-	if h := mh.handlers[r.Method]; h != nil {
+	if h := mh.handlers[strings.ToUpper(r.Method)]; h != nil {
 		h.ServeHTTP(rw, r)
 		return
 	}

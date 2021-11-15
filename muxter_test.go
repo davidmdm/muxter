@@ -438,7 +438,7 @@ func TestMethodHandler(t *testing.T) {
 	)
 
 	// GET
-	rw, r := httptest.NewRecorder(), httptest.NewRequest("GET", "/methods", nil)
+	rw, r := httptest.NewRecorder(), httptest.NewRequest("get", "/methods", nil)
 
 	mux.ServeHTTP(rw, r)
 

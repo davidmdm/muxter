@@ -367,3 +367,56 @@ func TestRecoverMiddleware(t *testing.T) {
 		t.Errorf("expected response body to be %q but got %q", expectedPayload, actual)
 	}
 }
+
+func TestGetMiddleware(t *testing.T) {
+	mux := New()
+
+	mux.HandleFunc(
+		"/",
+		func(rw http.ResponseWriter, r *http.Request) {
+			rw.Header().Set("X-Custom", "value")
+			io.WriteString(rw, "hello!")
+		},
+		GET,
+	)
+
+	// GET
+	rw, r := httptest.NewRecorder(), httptest.NewRequest("GET", "/", nil)
+
+	mux.ServeHTTP(rw, r)
+
+	if xcustom := rw.Header().Get("X-Custom"); xcustom != "value" {
+		t.Errorf("expected X-Custom header to equal %q but got %q", "value", xcustom)
+	}
+
+	expectedBody := "hello!"
+	if body := rw.Body.String(); body != expectedBody {
+		t.Errorf("expected body to be %q but got %q", expectedBody, body)
+	}
+
+	// HEAD
+	rw, r = httptest.NewRecorder(), httptest.NewRequest("HEAD", "/", nil)
+
+	mux.ServeHTTP(rw, r)
+
+	if length := rw.Body.Len(); length != 0 {
+		t.Errorf("expected length to be empty but got body of length %d", length)
+	}
+
+	if xcustom := rw.Header().Get("X-Custom"); xcustom != "value" {
+		t.Errorf("expected X-Custom header to equal %q but got %q", "value", xcustom)
+	}
+
+	if contentLength := rw.Header().Get("Content-Length"); contentLength != "6" {
+		t.Errorf("expected content-length to be 6 but got %q", contentLength)
+	}
+
+	// POST
+	rw, r = httptest.NewRecorder(), httptest.NewRequest("POST", "/", nil)
+
+	mux.ServeHTTP(rw, r)
+
+	if rw.Code != 405 {
+		t.Errorf("expected statusCode to be 405 but got %d", rw.Code)
+	}
+}

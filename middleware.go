@@ -1,9 +1,14 @@
 package muxter
 
 import (
+	"compress/gzip"
+	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -165,3 +170,40 @@ func CORS(opts AccessControlOptions) Middleware {
 // however default to AllowCredentials:true, therefore if making credentialed CORS requests you must
 // configure this via the standard CORS middleware function.
 var DefaultCORS = CORS(AccessControlOptions{})
+
+// Decompress modifies the request body who's content-encoding is gzip with a gzip.ReadCloser that reads from the original
+// source body. All readers are closed safely after the main handler returns.
+var Decompress Middleware = func(h http.Handler) http.Handler {
+	pool := sync.Pool{
+		New: func() interface{} {
+			return new(gzip.Reader)
+		},
+	}
+
+	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Content-Encoding") != "gzip" {
+			h.ServeHTTP(rw, r)
+			return
+		}
+
+		gr := pool.Get().(*gzip.Reader)
+		defer pool.Put(gr)
+		defer gr.Close()
+
+		if err := gr.Reset(r.Body); err != nil {
+			if errors.Is(err, io.EOF) {
+				h.ServeHTTP(rw, r)
+				return
+			}
+			http.Error(rw, fmt.Sprintf("unexpected error: %v", err), 500)
+			return
+		}
+
+		originalReqBody := r.Body
+		defer originalReqBody.Close()
+
+		r.Body = gr
+
+		h.ServeHTTP(rw, r)
+	})
+}

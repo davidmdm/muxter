@@ -1,6 +1,8 @@
 package muxter
 
 import (
+	"bytes"
+	"compress/gzip"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -488,5 +490,49 @@ func TestMethodHandler(t *testing.T) {
 
 	if rw.Code != 405 {
 		t.Errorf("expected statusCode to be 405 but got %d", rw.Code)
+	}
+}
+
+func TestDecompress(t *testing.T) {
+
+	mux := New()
+
+	mux.HandleFunc(
+		"/",
+		func(rw http.ResponseWriter, r *http.Request) {
+			io.Copy(rw, r.Body)
+		},
+		Decompress,
+	)
+
+	gzipReader := func(value string) io.Reader {
+		buf := new(bytes.Buffer)
+		gw := gzip.NewWriter(buf)
+
+		io.WriteString(gw, "hello world!")
+		gw.Flush()
+		gw.Close()
+
+		return buf
+	}
+
+	rw, r := httptest.NewRecorder(), httptest.NewRequest("POST", "/", gzipReader("hello world!"))
+	r.Header.Set("Content-Encoding", "gzip")
+
+	mux.ServeHTTP(rw, r)
+
+	expected := "hello world!"
+	if actual := rw.Body.String(); actual != expected {
+		t.Errorf("expected body to be %q but got %q", expected, actual)
+	}
+
+	// Without Content-Encoding header should be skipped
+	rw, r = httptest.NewRecorder(), httptest.NewRequest("POST", "/", gzipReader("hello world!"))
+
+	mux.ServeHTTP(rw, r)
+
+	expected = "\x1f\x8b\b\x00\x00\x00\x00\x00\x00\xff\xcaH\xcd\xc9\xc9W(\xcf/\xcaIQ\x04\x00\x00\x00\xff\xff\x01\x00\x00\xff\xffm´\x03\f\x00\x00\x00"
+	if actual := rw.Body.String(); actual != expected {
+		t.Errorf("expected body to be %q but got %q", expected, actual)
 	}
 }

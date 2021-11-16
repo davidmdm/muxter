@@ -207,3 +207,19 @@ var Decompress Middleware = func(h http.Handler) http.Handler {
 		h.ServeHTTP(rw, r)
 	})
 }
+
+// Skip decorates a middleware by giving it a predicate function for when this middleware should be skipped.
+// if the predicateFunc returns true, the middleware is skipped.
+func Skip(middleware Middleware, predicateFunc func(*http.Request) bool) Middleware {
+	return func(h http.Handler) http.Handler {
+		handlerWithMiddlewareApplied := middleware(h)
+
+		return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+			if predicateFunc(r) {
+				h.ServeHTTP(rw, r)
+				return
+			}
+			handlerWithMiddlewareApplied.ServeHTTP(rw, r)
+		})
+	}
+}

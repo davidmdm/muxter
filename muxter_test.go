@@ -536,3 +536,37 @@ func TestDecompress(t *testing.T) {
 		t.Errorf("expected body to be %q but got %q", expected, actual)
 	}
 }
+
+func TestSkipped(t *testing.T) {
+	mux := New()
+
+	cors := Skip(DefaultCORS, func(r *http.Request) bool { return r.Header.Get("origin") == "" })
+
+	mux.Use(cors)
+	mux.HandleFunc("/", func(rw http.ResponseWriter, r *http.Request) {})
+
+	rw, r := httptest.NewRecorder(), httptest.NewRequest("GET", "/", nil)
+
+	mux.ServeHTTP(rw, r)
+
+	expectedAbsentHeaders := []string{"Access-Control-Allow-Origin"}
+	for _, header := range expectedAbsentHeaders {
+		if value := rw.Header().Get(header); value != "" {
+			t.Errorf("expected no value for header %q but got %q", header, value)
+		}
+	}
+
+	rw, r = httptest.NewRecorder(), httptest.NewRequest("GET", "/", nil)
+	r.Header.Set("Origin", "http://locahost.test")
+
+	mux.ServeHTTP(rw, r)
+
+	expectedHeaders := map[string]string{
+		"Access-Control-Allow-Origin": "*",
+	}
+	for header, expected := range expectedHeaders {
+		if actual := rw.Header().Get(header); actual != expected {
+			t.Errorf("expected header %q to have value %q but got %q", header, expected, actual)
+		}
+	}
+}

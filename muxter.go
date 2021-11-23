@@ -337,31 +337,24 @@ type MethodHandler struct {
 	methodNotAllowedHandler http.Handler
 }
 
-func NewMethodHandler() *MethodHandler {
-	return &MethodHandler{}
-}
+type MethodHandlerMap = map[string]http.Handler
 
-func (mh *MethodHandler) AddMethodHandler(method string, handlerFunc http.Handler) *MethodHandler {
-	if mh.handlers == nil {
-		mh.handlers = make(map[string]http.Handler)
+// MakeMethodHandler takes a map of http verbs to http handlers and a handler should no method match.
+// If nil is provided for the methodNotAllowedHandler the default handler will be used.
+func MakeMethodHandler(handlerMap MethodHandlerMap, methodNotAllowedHandler http.Handler) MethodHandler {
+	handlers := make(map[string]http.Handler)
+	for method, handler := range handlerMap {
+		handlers[strings.ToUpper(method)] = handler
 	}
-	method = strings.ToUpper(method)
-	mh.handlers[method] = handlerFunc
 
-	return mh
-}
+	if methodNotAllowedHandler == nil {
+		methodNotAllowedHandler = defaultMethodNotAllowedHandler
+	}
 
-func (mh *MethodHandler) AddMethodHandlerFunc(method string, handlerFunc http.HandlerFunc) *MethodHandler {
-	return mh.AddMethodHandler(method, handlerFunc)
-}
-
-func (mh *MethodHandler) SetMethodNotAllowedHandler(handler http.Handler) *MethodHandler {
-	mh.methodNotAllowedHandler = handler
-	return mh
-}
-
-func (mh *MethodHandler) SetMethodNotAllowedHandlerFunc(handler http.HandlerFunc) *MethodHandler {
-	return mh.SetMethodNotAllowedHandler(handler)
+	return MethodHandler{
+		handlers:                handlers,
+		methodNotAllowedHandler: methodNotAllowedHandler,
+	}
 }
 
 func (mh MethodHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {

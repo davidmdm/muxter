@@ -426,13 +426,18 @@ func TestGetMiddleware(t *testing.T) {
 func TestMethodHandler(t *testing.T) {
 	mux := New()
 
-	methodHandler := NewMethodHandler().
-		AddMethodHandlerFunc("get", func(rw http.ResponseWriter, r *http.Request) {
-			io.WriteString(rw, "GET")
-		}).
-		AddMethodHandlerFunc("post", func(rw http.ResponseWriter, r *http.Request) {
-			io.WriteString(rw, "POST")
-		})
+	methodHandler := new(MethodHandler)
+	*methodHandler = MakeMethodHandler(
+		map[string]http.Handler{
+			"get": http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+				io.WriteString(rw, "GET")
+			}),
+			"post": http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+				io.WriteString(rw, "POST")
+			}),
+		},
+		nil,
+	)
 
 	mux.Handle(
 		"/methods",
@@ -473,7 +478,7 @@ func TestMethodHandler(t *testing.T) {
 		t.Errorf("expected statusCode to be 405 but got %d", rw.Code)
 	}
 
-	methodHandler.SetMethodNotAllowedHandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+	methodHandler.methodNotAllowedHandler = http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		rw.WriteHeader(405)
 		io.WriteString(rw, "YO YO YO NO")
 	})

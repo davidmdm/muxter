@@ -129,11 +129,11 @@ func (n *node) lookup(url string) (handler http.Handler, params map[string]strin
 
 func (n *node) merge(other *node, middlewares ...Middleware) *node {
 	if other.fixedHandler != nil {
-		n.fixedHandler = withMiddleware(other.fixedHandler, middlewares...)
+		n.fixedHandler = WithMiddleware(other.fixedHandler, middlewares...)
 	}
 
 	if other.subtreeHandler != nil {
-		n.subtreeHandler = withMiddleware(other.subtreeHandler, middlewares...)
+		n.subtreeHandler = WithMiddleware(other.subtreeHandler, middlewares...)
 	}
 
 	for segment, nextNode := range other.segments {
@@ -215,7 +215,7 @@ func (m *Mux) HandleFunc(pattern string, handler http.HandlerFunc, middlewares .
 // such that the first middleware will be called before passing control to the next middleware.
 // ie mux.HandleFunc(pattern, handler, m1, m2, m3) => request flow will pass through m1 then m2 then m3.
 func (m *Mux) Handle(pattern string, handler http.Handler, middlewares ...Middleware) {
-	handler = withMiddleware(handler, append(m.middlewares, middlewares...)...)
+	handler = WithMiddleware(handler, append(m.middlewares, middlewares...)...)
 
 	node, remainder := m.root.traverse(pattern)
 

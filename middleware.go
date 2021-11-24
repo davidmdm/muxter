@@ -15,7 +15,7 @@ import (
 // Middleware is a function that takes a handler and modifies its behaviour by returning a new handler
 type Middleware = func(http.Handler) http.Handler
 
-func withMiddleware(handler http.Handler, middlewares ...Middleware) http.Handler {
+func WithMiddleware(handler http.Handler, middlewares ...Middleware) http.Handler {
 	for i := len(middlewares) - 1; i >= 0; i-- {
 		handler = middlewares[i](handler)
 	}

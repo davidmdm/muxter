@@ -102,6 +102,25 @@ func main() {
 	mux.RegisterMux("/api/v1", GetAPIV1Mux(), V1AuthMiddleware)
 	mux.RegisterMux("/api/v2", GetAPIV2Mux(), V2AuthMiddleware)
 
+	// Register different method handlers to the same route pattern
+	mux.Handle(
+		"/resource/:id",
+		muxter.MakeMethodHandler(
+			muxter.MethodHandlerMap{
+				"get": http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+					// get resource
+				}),
+				"put": http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+					// put resource
+				}),
+				"delete": http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+					// delete resource
+				}),
+			},
+			nil, // custom method not allowed handler goes here. If nil default 405 with default statusText.
+		),
+	)
+
 	// Add a custom not found handler.
 	mux.NotFoundHandler = func(rw http.ResponseWriter, r *http.Request) {
 		// custom not found logic

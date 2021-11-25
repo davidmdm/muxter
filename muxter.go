@@ -41,16 +41,12 @@ func (p paramPool) Put(params map[string]string) {
 	p.pool.Put(params)
 }
 
-var pool = newParamPool()
-
-func newParamPool() paramPool {
-	return paramPool{
-		pool: &sync.Pool{
-			New: func() interface{} {
-				return make(map[string]string)
-			},
+var pool = paramPool{
+	pool: &sync.Pool{
+		New: func() interface{} {
+			return make(map[string]string)
 		},
-	}
+	},
 }
 
 type node struct {
@@ -75,11 +71,9 @@ func (n *node) lookup(url string) (handler http.Handler, params map[string]strin
 
 		key, url = split(url)
 		if key != "" {
-			if n.segments != nil {
-				if next, ok := n.segments[key]; ok {
-					n = next
-					continue
-				}
+			if next, ok := n.segments[key]; ok {
+				n = next
+				continue
 			}
 
 			var handler http.Handler

@@ -78,6 +78,54 @@ func TestRouting(t *testing.T) {
 	}
 }
 
+func TestParams(t *testing.T) {
+
+	mux := New()
+
+	handler := new(HandlerMock)
+
+	mux.Handle("/no/params", handler)
+	mux.Handle("/multiple/:p1/params/:p2", handler)
+
+	handler.ServeHTTPFunc = func(responseWriter http.ResponseWriter, request *http.Request) {
+		params := Params(request)
+		if params != nil {
+			t.Errorf("expected params to be nil but got: %v", params)
+		}
+	}
+
+	mux.ServeHTTP(nil, httptest.NewRequest("GET", "/no/params", nil))
+
+	if callCount := len(handler.ServeHTTPCalls()); callCount != 1 {
+		t.Errorf("expected handler to be called once but was called %d times", callCount)
+	}
+
+	handler.ServeHTTPFunc = func(responseWriter http.ResponseWriter, request *http.Request) {
+		params := Params(request)
+
+		if len(params) != 2 {
+			t.Errorf("expected params to have two entries but got %d", len(params))
+		}
+
+		expected := "A"
+		if actual := params["p1"]; actual != expected {
+			t.Errorf("expected params p1 to be %q but got %q", expected, actual)
+		}
+
+		expected = "B"
+		if actual := params["p2"]; actual != expected {
+			t.Errorf("expected params p2 tp be %q but got %q", expected, actual)
+		}
+	}
+
+	mux.ServeHTTP(nil, httptest.NewRequest("GET", "/multiple/A/params/B", nil))
+
+	if callCount := len(handler.ServeHTTPCalls()); callCount != 2 {
+		t.Errorf("expected handler to be called twice but was called %d times", callCount)
+	}
+
+}
+
 func TestSubdirRedirect(t *testing.T) {
 	mux := New()
 	mux.HandleFunc("/dir/", func(rw http.ResponseWriter, r *http.Request) {})

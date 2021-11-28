@@ -184,8 +184,7 @@ func (m Mux) ServeHTTP(res http.ResponseWriter, req *http.Request) {
 	}
 
 	if params != nil {
-		ctx := context.WithValue(req.Context(), paramKey, params)
-		req = req.WithContext(ctx)
+		*req = *req.WithContext(context.WithValue(req.Context(), paramKey, params))
 	}
 
 	handler.ServeHTTP(res, req)

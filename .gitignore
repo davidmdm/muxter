@@ -5,3 +5,5 @@ debug.test
 __debug_bin
 
 playground
+*.out
+*.test

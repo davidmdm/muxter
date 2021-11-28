@@ -78,8 +78,22 @@ func TestRouting(t *testing.T) {
 	}
 }
 
-func TestParams(t *testing.T) {
+func BenchmarkRouting(b *testing.B) {
+	mux := New()
 
+	mux.HandleFunc("/some/deeply/:nested/path/:id", func(rw http.ResponseWriter, r *http.Request) {})
+
+	b.ResetTimer()
+
+	rw := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/some/deeply/nested/path/id", nil)
+
+	for i := 0; i < b.N; i++ {
+		mux.ServeHTTP(rw, r)
+	}
+}
+
+func TestParams(t *testing.T) {
 	mux := New()
 
 	handler := new(HandlerMock)

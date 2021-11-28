@@ -7,6 +7,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/gin-gonic/gin"
+	"github.com/go-chi/chi/v5"
+	"github.com/julienschmidt/httprouter"
+	"github.com/labstack/echo/v4"
 )
 
 func TestRouting(t *testing.T) {
@@ -82,6 +87,81 @@ func BenchmarkRouting(b *testing.B) {
 	mux := New()
 
 	mux.HandleFunc("/some/deeply/:nested/path/:id", func(rw http.ResponseWriter, r *http.Request) {})
+
+	b.ResetTimer()
+
+	rw := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/some/deeply/nested/path/id", nil)
+
+	for i := 0; i < b.N; i++ {
+		mux.ServeHTTP(rw, r)
+	}
+}
+
+func BenchmarkSTD(b *testing.B) {
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("/some/deeply/nested/path/id", func(rw http.ResponseWriter, r *http.Request) {})
+
+	b.ResetTimer()
+
+	rw := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/some/deeply/nested/path/id", nil)
+
+	for i := 0; i < b.N; i++ {
+		mux.ServeHTTP(rw, r)
+	}
+}
+
+func BenchmarkChi(b *testing.B) {
+	mux := chi.NewMux()
+
+	mux.HandleFunc("/some/deeply/{nested}/path/{id}", func(rw http.ResponseWriter, r *http.Request) {})
+
+	b.ResetTimer()
+
+	rw := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/some/deeply/nested/path/id", nil)
+
+	for i := 0; i < b.N; i++ {
+		mux.ServeHTTP(rw, r)
+	}
+}
+
+func BenchmarkGin(b *testing.B) {
+	mux := gin.New()
+
+	mux.GET("/some/deeply/:nested/path/:id", func(c *gin.Context) {})
+
+	b.ResetTimer()
+
+	rw := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/some/deeply/nested/path/id", nil)
+
+	for i := 0; i < b.N; i++ {
+		mux.ServeHTTP(rw, r)
+	}
+}
+
+func BenchmarkHTTPRouting(b *testing.B) {
+	mux := httprouter.New()
+
+	mux.HandlerFunc("GET", "/some/deeply/:nested/path/:id", func(rw http.ResponseWriter, r *http.Request) {})
+
+	b.ResetTimer()
+
+	rw := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/some/deeply/nested/path/id", nil)
+
+	for i := 0; i < b.N; i++ {
+		mux.ServeHTTP(rw, r)
+	}
+}
+
+func BenchmarkEchoRouting(b *testing.B) {
+	mux := echo.New()
+
+	mux.GET("/some/deeply/:nested/path/:id", func(c echo.Context) error { return nil })
 
 	b.ResetTimer()
 

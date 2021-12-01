@@ -188,7 +188,6 @@ var Decompress Middleware = func(h http.Handler) http.Handler {
 
 		gr := pool.Get().(*gzip.Reader)
 		defer pool.Put(gr)
-		defer gr.Close()
 
 		if err := gr.Reset(r.Body); err != nil {
 			if errors.Is(err, io.EOF) {
@@ -198,6 +197,9 @@ var Decompress Middleware = func(h http.Handler) http.Handler {
 			http.Error(rw, fmt.Sprintf("unexpected error: %v", err), 500)
 			return
 		}
+
+		// Only close gzip reader if gr.Reset is successful otherwise decompressor is not set and close will panic.
+		defer gr.Close()
 
 		originalReqBody := r.Body
 		defer originalReqBody.Close()

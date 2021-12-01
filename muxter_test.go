@@ -561,7 +561,6 @@ func TestMethodHandler(t *testing.T) {
 }
 
 func TestDecompress(t *testing.T) {
-
 	mux := New()
 
 	mux.HandleFunc(
@@ -599,6 +598,28 @@ func TestDecompress(t *testing.T) {
 	mux.ServeHTTP(rw, r)
 
 	expected = "\x1f\x8b\b\x00\x00\x00\x00\x00\x00\xff\xcaH\xcd\xc9\xc9W(\xcf/\xcaIQ\x04\x00\x00\x00\xff\xff\x01\x00\x00\xff\xffm´\x03\f\x00\x00\x00"
+	if actual := rw.Body.String(); actual != expected {
+		t.Errorf("expected body to be %q but got %q", expected, actual)
+	}
+}
+
+func TestDecompressNoContent(t *testing.T) {
+	mux := New()
+
+	mux.HandleFunc(
+		"/",
+		func(rw http.ResponseWriter, r *http.Request) {
+			io.Copy(rw, r.Body)
+		},
+		Decompress,
+	)
+
+	rw, r := httptest.NewRecorder(), httptest.NewRequest("POST", "/", nil)
+	r.Header.Set("Content-Encoding", "gzip")
+
+	mux.ServeHTTP(rw, r)
+
+	expected := ""
 	if actual := rw.Body.String(); actual != expected {
 		t.Errorf("expected body to be %q but got %q", expected, actual)
 	}

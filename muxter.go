@@ -42,11 +42,7 @@ func (p paramPool) Put(params map[string]string) {
 }
 
 var pool = paramPool{
-	pool: &sync.Pool{
-		New: func() interface{} {
-			return make(map[string]string)
-		},
-	},
+	pool: &sync.Pool{New: func() interface{} { return make(map[string]string) }},
 }
 
 type node struct {
@@ -56,69 +52,61 @@ type node struct {
 	subtreeHandler http.Handler
 }
 
-func (n *node) lookup(url string) (handler http.Handler, params map[string]string, depth int) {
+func (n *node) lookup(url string) (targetNode *node, params map[string]string, depth int) {
 	var key string
-	var subtreeHandler http.Handler
+	var subtreeNode *node
 	var subtreeDepth int
 
 	maxUrlLength := len(url)
 
 	for {
 		if n.subtreeHandler != nil {
-			subtreeHandler = n.subtreeHandler
+			subtreeNode = n
 			subtreeDepth = maxUrlLength - len(url)
 		}
 
 		key, url = split(url)
-		if key != "" {
-			if next, ok := n.segments[key]; ok {
-				n = next
-				continue
-			}
-
-			var handler http.Handler
-			var param string
-			max := -1
-
-			for wildcard, wildNode := range n.wildcards {
-				h, p, c := wildNode.lookup(url)
-				if h != nil && c > max {
-					handler, params, max = h, p, c
-					param = wildcard
-				}
-			}
-
-			if handler != nil {
-				if params == nil {
-					params = pool.Get()
-				}
-				params[param] = key
-
-				return handler, params, maxUrlLength - len(url) + max
-			}
-
-			if subtreeHandler != nil {
-				return subtreeHandler, params, subtreeDepth
-			}
-
-			return nil, nil, 0
+		if key == "" {
+			break
 		}
 
-		if url == "" {
-			if n.fixedHandler != nil {
-				return n.fixedHandler, params, maxUrlLength
-			}
-			if h, _, _ := n.lookup("/"); h != nil {
-				return redirectToSubdirHandler, params, maxUrlLength
+		if next, ok := n.segments[key]; ok {
+			n = next
+			continue
+		}
+
+		var param string
+		max := -1
+
+		for wildcard, wildNode := range n.wildcards {
+			n, p, c := wildNode.lookup(url)
+			if n != nil && c > max {
+				targetNode, params, max = n, p, c
+				param = wildcard
 			}
 		}
 
-		if subtreeHandler != nil {
-			return subtreeHandler, params, subtreeDepth
+		if targetNode == nil {
+			break
 		}
 
-		return nil, nil, 0
+		if params == nil {
+			params = pool.Get()
+		}
+		params[param] = key
+
+		return targetNode, params, maxUrlLength - len(url) + max
 	}
+
+	if key == "" {
+		return n, params, maxUrlLength
+	}
+
+	if subtreeNode != nil {
+		return subtreeNode, params, subtreeDepth
+	}
+
+	return nil, nil, 0
 }
 
 func (n *node) merge(other *node, middlewares ...Middleware) *node {
@@ -162,18 +150,52 @@ type Mux struct {
 
 	// NotFoundHandler will be called if no registered route has been matched for a given request.
 	// if NotFoundHandler is nil a default NotFoundHandler will be used instead simply returning 404 and the default http.StatusText(404) as body.
-	NotFoundHandler http.HandlerFunc
+	NotFoundHandler    http.HandlerFunc
+	matchTrailingSlash bool
+}
+
+type MuxOption func(*Mux)
+
+func MatchTrailingSlash(value bool) MuxOption {
+	return func(m *Mux) {
+		m.matchTrailingSlash = value
+	}
 }
 
 // New returns a pointer to a new muxter.Mux
-func New() *Mux {
-	return &Mux{}
+func New(options ...MuxOption) *Mux {
+	m := &Mux{}
+	for _, apply := range options {
+		apply(m)
+	}
+	return m
 }
 
 // ServeHTTP implements the net/http Handler interface.
 func (m Mux) ServeHTTP(res http.ResponseWriter, req *http.Request) {
-	handler, params, _ := m.root.lookup(cleanPath(req.URL.Path))
+	path := cleanPath(req.URL.Path)
+	node, params, length := m.root.lookup(path)
 	defer pool.Put(params)
+
+	trailingSlash := strings.HasSuffix(path, "/")
+
+	var handler http.Handler
+
+	if node != nil {
+		if length < len(path) {
+			handler = node.subtreeHandler
+		} else if trailingSlash {
+			if node.subtreeHandler != nil {
+				handler = node.subtreeHandler
+			} else if m.matchTrailingSlash && node.fixedHandler != nil {
+				handler = node.fixedHandler
+			}
+		} else if node.fixedHandler != nil {
+			handler = node.fixedHandler
+		} else if node.subtreeHandler != nil {
+			handler = redirectToSubdirHandler
+		}
+	}
 
 	if handler == nil {
 		if m.NotFoundHandler != nil {

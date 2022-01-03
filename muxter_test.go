@@ -30,25 +30,25 @@ func TestRouting(t *testing.T) {
 		InvokedHandler *HandlerMock
 		ExpectedParams map[string]string
 	}{
-		// {
-		// 	Name:           "gets fixed route",
-		// 	URL:            "/api/v1/books",
-		// 	InvokedHandler: defaultHandler,
-		// },
+		{
+			Name:           "gets fixed route",
+			URL:            "/api/v1/books",
+			InvokedHandler: defaultHandler,
+		},
 		{
 			Name:           "get subtree route",
 			URL:            "/api/v1/books/cats_cradle",
 			InvokedHandler: subdirHandler,
 		},
-		// {
-		// 	Name:           "match params",
-		// 	URL:            "/resource/my_resource/subresource/my_sub",
-		// 	InvokedHandler: defaultHandler,
-		// 	ExpectedParams: map[string]string{
-		// 		"resourceID": "my_resource",
-		// 		"subID":      "my_sub",
-		// 	},
-		// },
+		{
+			Name:           "match params",
+			URL:            "/resource/my_resource/subresource/my_sub",
+			InvokedHandler: defaultHandler,
+			ExpectedParams: map[string]string{
+				"resourceID": "my_resource",
+				"subID":      "my_sub",
+			},
+		},
 	}
 
 	for _, tc := range testCases {

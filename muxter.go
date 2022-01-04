@@ -50,6 +50,7 @@ type node struct {
 	segments       map[string]*node
 	fixedHandler   http.Handler
 	subtreeHandler http.Handler
+	mux            *Mux
 }
 
 func (n *node) lookup(url string) (targetNode *node, params map[string]string, depth int) {
@@ -60,6 +61,19 @@ func (n *node) lookup(url string) (targetNode *node, params map[string]string, d
 	maxUrlLength := len(url)
 
 	for {
+		if n.mux != nil {
+			node, p, d := n.mux.root.lookup(url)
+			if node == nil {
+				break
+			}
+			if params == nil && len(p) > 0 {
+				params = pool.Get()
+			}
+			for k, v := range p {
+				params[k] = v
+			}
+			return node, params, d + maxUrlLength - len(url)
+		}
 		if n.subtreeHandler != nil {
 			subtreeNode = n
 			subtreeDepth = maxUrlLength - len(url)
@@ -109,38 +123,70 @@ func (n *node) lookup(url string) (targetNode *node, params map[string]string, d
 	return nil, nil, 0
 }
 
-func (n *node) merge(other *node, middlewares ...Middleware) *node {
-	if other.fixedHandler != nil {
-		n.fixedHandler = WithMiddleware(other.fixedHandler, middlewares...)
-	}
+func (n *node) traverse(pattern string) (target *node, remainder string) {
+	var key string
+	pattern = cleanPath(pattern)
 
-	if other.subtreeHandler != nil {
-		n.subtreeHandler = WithMiddleware(other.subtreeHandler, middlewares...)
-	}
-
-	for segment, nextNode := range other.segments {
-		if n.segments == nil {
-			n.segments = make(map[string]*node)
+	for {
+		key, pattern = split(pattern)
+		if key == "" {
+			break
 		}
-		if currentNode := n.segments[segment]; currentNode == nil {
-			n.segments[segment] = new(node).merge(nextNode, middlewares...)
+
+		var nodeMap map[string]*node
+		if key[0] == ':' {
+			if n.wildcards == nil {
+				n.wildcards = make(map[string]*node)
+			}
+			nodeMap = n.wildcards
+			key = key[1:]
 		} else {
-			currentNode.merge(nextNode, middlewares...)
+			if n.segments == nil {
+				n.segments = make(map[string]*node)
+			}
+			nodeMap = n.segments
+		}
+
+		next, ok := nodeMap[key]
+		if !ok {
+			next = new(node)
+			nodeMap[key] = next
+		}
+		n = next
+	}
+
+	return n, pattern
+}
+
+func (n *node) clone(middlewares ...Middleware) *node {
+	clone := new(node)
+
+	// TODO Mux Middleware integration?
+	clone.mux = n.mux
+
+	if n.fixedHandler != nil {
+		clone.fixedHandler = WithMiddleware(n.fixedHandler, middlewares...)
+	}
+
+	if n.subtreeHandler != nil {
+		clone.subtreeHandler = WithMiddleware(n.subtreeHandler, middlewares...)
+	}
+
+	if n.segments != nil {
+		clone.segments = make(map[string]*node)
+		for key, value := range n.segments {
+			clone.segments[key] = value.clone(middlewares...)
 		}
 	}
 
-	for wildcard, nextNode := range other.wildcards {
-		if n.wildcards == nil {
-			n.wildcards = make(map[string]*node)
-		}
-		if currentNode := n.wildcards[wildcard]; currentNode == nil {
-			n.wildcards[wildcard] = new(node).merge(nextNode, middlewares...)
-		} else {
-			currentNode.merge(nextNode)
+	if n.wildcards != nil {
+		clone.wildcards = make(map[string]*node)
+		for key, value := range n.wildcards {
+			clone.wildcards[key] = value.clone(middlewares...)
 		}
 	}
 
-	return n
+	return clone
 }
 
 // Mux is a request multiplexer with the same routing behaviour as the standard libraries net/http ServeMux
@@ -245,42 +291,18 @@ func (m *Mux) Handle(pattern string, handler http.Handler, middlewares ...Middle
 // Middlewares are called in this order: parent global middlewares, middlewares passed here, child mux global middlewares and child middlewares.
 func (m *Mux) RegisterMux(pattern string, mux *Mux, middlewares ...Middleware) {
 	n, _ := m.root.traverse(pattern)
-	n.merge(&mux.root, append(m.middlewares, middlewares...)...)
+	n.mux = mux.clone(concatMiddlewares(m.middlewares, middlewares)...)
 }
 
-func (n *node) traverse(pattern string) (target *node, remainder string) {
-	var key string
-	pattern = cleanPath(pattern)
-
-	for {
-		key, pattern = split(pattern)
-		if key == "" {
-			break
-		}
-
-		var nodeMap map[string]*node
-		if key[0] == ':' {
-			if n.wildcards == nil {
-				n.wildcards = make(map[string]*node)
-			}
-			nodeMap = n.wildcards
-			key = key[1:]
-		} else {
-			if n.segments == nil {
-				n.segments = make(map[string]*node)
-			}
-			nodeMap = n.segments
-		}
-
-		next, ok := nodeMap[key]
-		if !ok {
-			next = new(node)
-			nodeMap[key] = next
-		}
-		n = next
+func (m *Mux) clone(middlewares ...Middleware) *Mux {
+	middlewares = concatMiddlewares(middlewares, m.middlewares)
+	clone := &Mux{
+		root:               *m.root.clone(middlewares...),
+		middlewares:        middlewares,
+		NotFoundHandler:    m.NotFoundHandler,
+		matchTrailingSlash: m.matchTrailingSlash,
 	}
-
-	return n, pattern
+	return clone
 }
 
 type paramKeyType int
@@ -407,4 +429,12 @@ func (mh MethodHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	}
 
 	defaultMethodNotAllowedHandler(rw, r)
+}
+
+func concatMiddlewares(stacks ...[]Middleware) []Middleware {
+	var middlewares []Middleware
+	for _, stack := range stacks {
+		middlewares = append(middlewares, stack...)
+	}
+	return middlewares
 }

@@ -8,7 +8,7 @@ import (
 	"sync"
 )
 
-var _ http.Handler = Mux{}
+var _ http.Handler = &Mux{}
 
 var defaultNotFoundHandler http.HandlerFunc = func(rw http.ResponseWriter, r *http.Request) {
 	http.Error(rw, http.StatusText(http.StatusNotFound), http.StatusNotFound)
@@ -53,7 +53,7 @@ type node struct {
 	mux            *Mux
 }
 
-func (n *node) lookup(url string) (targetNode *node, params map[string]string, depth int) {
+func (n *node) lookup(url string) (targetMux *Mux, targetNode *node, params map[string]string, depth int) {
 	var key string
 	var subtreeNode *node
 	var subtreeDepth int
@@ -62,9 +62,12 @@ func (n *node) lookup(url string) (targetNode *node, params map[string]string, d
 
 	for {
 		if n.mux != nil {
-			node, p, d := n.mux.root.lookup(url)
+			m, node, p, d := n.mux.root.lookup(url)
 			if node == nil {
 				break
+			}
+			if m == nil {
+				m = n.mux
 			}
 			if params == nil && len(p) > 0 {
 				params = pool.Get()
@@ -72,7 +75,7 @@ func (n *node) lookup(url string) (targetNode *node, params map[string]string, d
 			for k, v := range p {
 				params[k] = v
 			}
-			return node, params, d + maxUrlLength - len(url)
+			return m, node, params, d + maxUrlLength - len(url)
 		}
 		if n.subtreeHandler != nil {
 			subtreeNode = n
@@ -93,9 +96,9 @@ func (n *node) lookup(url string) (targetNode *node, params map[string]string, d
 		max := -1
 
 		for wildcard, wildNode := range n.wildcards {
-			n, p, c := wildNode.lookup(url)
+			m, n, p, c := wildNode.lookup(url)
 			if n != nil && c > max {
-				targetNode, params, max = n, p, c
+				targetMux, targetNode, params, max = m, n, p, c
 				param = wildcard
 			}
 		}
@@ -109,18 +112,18 @@ func (n *node) lookup(url string) (targetNode *node, params map[string]string, d
 		}
 		params[param] = key
 
-		return targetNode, params, maxUrlLength - len(url) + max
+		return targetMux, targetNode, params, maxUrlLength - len(url) + max
 	}
 
 	if key == "" {
-		return n, params, maxUrlLength
+		return nil, n, params, maxUrlLength
 	}
 
 	if subtreeNode != nil {
-		return subtreeNode, params, subtreeDepth
+		return nil, subtreeNode, params, subtreeDepth
 	}
 
-	return nil, nil, 0
+	return nil, nil, nil, 0
 }
 
 func (n *node) traverse(pattern string) (target *node, remainder string) {
@@ -218,9 +221,12 @@ func New(options ...MuxOption) *Mux {
 }
 
 // ServeHTTP implements the net/http Handler interface.
-func (m Mux) ServeHTTP(res http.ResponseWriter, req *http.Request) {
+func (m *Mux) ServeHTTP(res http.ResponseWriter, req *http.Request) {
 	path := cleanPath(req.URL.Path)
-	node, params, length := m.root.lookup(path)
+	targetMux, node, params, length := m.root.lookup(path)
+	if targetMux == nil {
+		targetMux = m
+	}
 	defer pool.Put(params)
 
 	trailingSlash := strings.HasSuffix(path, "/")
@@ -233,7 +239,7 @@ func (m Mux) ServeHTTP(res http.ResponseWriter, req *http.Request) {
 		} else if trailingSlash {
 			if node.subtreeHandler != nil {
 				handler = node.subtreeHandler
-			} else if m.matchTrailingSlash && node.fixedHandler != nil {
+			} else if targetMux.matchTrailingSlash && node.fixedHandler != nil {
 				handler = node.fixedHandler
 			}
 		} else if node.fixedHandler != nil {
@@ -244,8 +250,8 @@ func (m Mux) ServeHTTP(res http.ResponseWriter, req *http.Request) {
 	}
 
 	if handler == nil {
-		if m.NotFoundHandler != nil {
-			handler = m.NotFoundHandler
+		if targetMux.NotFoundHandler != nil {
+			handler = targetMux.NotFoundHandler
 		} else {
 			handler = defaultNotFoundHandler
 		}

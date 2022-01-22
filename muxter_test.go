@@ -372,6 +372,93 @@ func TestRegisterMux(t *testing.T) {
 	}
 }
 
+func TestRegisterMuxWithOptions(t *testing.T) {
+	root := New()
+
+	api := New()
+
+	api.HandleFunc("/crud", func(rw http.ResponseWriter, r *http.Request) {
+		io.WriteString(rw, "API CRUD CALLED")
+	})
+
+	api.NotFoundHandler = func(rw http.ResponseWriter, r *http.Request) {
+		rw.WriteHeader(404)
+		io.WriteString(rw, "no matching api route")
+	}
+
+	assets := New(MatchTrailingSlash(true))
+
+	assets.HandleFunc("/image.jpg", func(rw http.ResponseWriter, r *http.Request) {
+		io.WriteString(rw, "IMAGE.JPG")
+	})
+
+	root.RegisterMux("/api", api)
+	root.RegisterMux("/assets", assets)
+
+	testcases := []struct {
+		Name                 string
+		Path                 string
+		ResponseExpectations func(t *testing.T, r *httptest.ResponseRecorder)
+	}{
+		{
+			Name: "calls api successfully",
+			Path: "/api/crud",
+			ResponseExpectations: func(t *testing.T, r *httptest.ResponseRecorder) {
+				if r.Code != 200 {
+					t.Errorf("expected response to be 200 but got %d", r.Code)
+				}
+				expected := "API CRUD CALLED"
+				if actual := r.Body.String(); expected != actual {
+					t.Errorf("expected body to be %q but got %q", expected, actual)
+				}
+			},
+		},
+		{
+			Name: "api does not match trailing slash",
+			Path: "/api/crud/",
+			ResponseExpectations: func(t *testing.T, r *httptest.ResponseRecorder) {
+				if r.Code != 404 {
+					t.Errorf("expected 404 but got %d", r.Code)
+				}
+				expected := "no matching api route"
+				if actual := r.Body.String(); actual != expected {
+					t.Errorf("expected body to be %q but got %q", expected, actual)
+				}
+			},
+		},
+		{
+			Name: "asset route matches",
+			Path: "/assets/image.jpg",
+			ResponseExpectations: func(t *testing.T, r *httptest.ResponseRecorder) {
+				expected := "IMAGE.JPG"
+				if actual := r.Body.String(); actual != expected {
+					t.Errorf("expected body to be %q but got %q", expected, actual)
+				}
+			},
+		},
+		{
+			Name: "asset route matches trailing slash",
+			Path: "/assets/image.jpg/",
+			ResponseExpectations: func(t *testing.T, r *httptest.ResponseRecorder) {
+				expected := "IMAGE.JPG"
+				if actual := r.Body.String(); actual != expected {
+					t.Errorf("expected body to be %q but got %q", expected, actual)
+				}
+			},
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.Name, func(t *testing.T) {
+			req := httptest.NewRequest("GET", tc.Path, nil)
+			rec := httptest.NewRecorder()
+			root.ServeHTTP(rec, req)
+			tc.ResponseExpectations(t, rec)
+		})
+	}
+
+}
+
 func TestRegisterMuxParams(t *testing.T) {
 	child := New()
 

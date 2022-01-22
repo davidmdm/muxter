@@ -2,6 +2,7 @@ package muxter
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"path"
 	"strings"
@@ -63,20 +64,14 @@ func (n *node) lookup(url string) (targetMux *Mux, targetNode *node, params map[
 	for {
 		if n.mux != nil {
 			m, node, p, d := n.mux.root.lookup(url)
-			if node == nil {
-				break
+			if node != nil {
+				if m == nil {
+					m = n.mux
+				}
+				return m, node, p, d + maxUrlLength - len(url)
 			}
-			if m == nil {
-				m = n.mux
-			}
-			if params == nil && len(p) > 0 {
-				params = pool.Get()
-			}
-			for k, v := range p {
-				params[k] = v
-			}
-			return m, node, params, d + maxUrlLength - len(url)
 		}
+
 		if n.subtreeHandler != nil {
 			subtreeNode = n
 			subtreeDepth = maxUrlLength - len(url)
@@ -164,8 +159,10 @@ func (n *node) traverse(pattern string) (target *node, remainder string) {
 func (n *node) clone(middlewares ...Middleware) *node {
 	clone := new(node)
 
-	// TODO Mux Middleware integration?
 	clone.mux = n.mux
+	if clone.mux != nil {
+		clone.mux = clone.mux.clone(middlewares...)
+	}
 
 	if n.fixedHandler != nil {
 		clone.fixedHandler = WithMiddleware(n.fixedHandler, middlewares...)
@@ -194,12 +191,9 @@ func (n *node) clone(middlewares ...Middleware) *node {
 
 // Mux is a request multiplexer with the same routing behaviour as the standard libraries net/http ServeMux
 type Mux struct {
-	root        node
-	middlewares []Middleware
-
-	// NotFoundHandler will be called if no registered route has been matched for a given request.
-	// if NotFoundHandler is nil a default NotFoundHandler will be used instead simply returning 404 and the default http.StatusText(404) as body.
+	root               node
 	NotFoundHandler    http.HandlerFunc
+	middlewares        []Middleware
 	matchTrailingSlash bool
 }
 
@@ -438,6 +432,7 @@ func (mh MethodHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 }
 
 func concatMiddlewares(stacks ...[]Middleware) []Middleware {
+	fmt.Println("YOLO", stacks)
 	var middlewares []Middleware
 	for _, stack := range stacks {
 		middlewares = append(middlewares, stack...)

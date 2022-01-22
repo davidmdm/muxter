@@ -16,6 +16,9 @@ import (
 type Middleware = func(http.Handler) http.Handler
 
 func WithMiddleware(handler http.Handler, middlewares ...Middleware) http.Handler {
+	if handler == nil {
+		return nil
+	}
 	for i := len(middlewares) - 1; i >= 0; i-- {
 		handler = middlewares[i](handler)
 	}

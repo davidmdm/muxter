@@ -282,10 +282,10 @@ func TestCustomNotFoundHandler(t *testing.T) {
 		t.Errorf("expected body to be %q but got %q", expectedBody, body)
 	}
 
-	mux.NotFoundHandler = func(rw http.ResponseWriter, r *http.Request) {
+	mux.SetNotFoundHandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		rw.WriteHeader(404)
 		io.WriteString(rw, "you are lost buddy!")
-	}
+	})
 
 	rw = httptest.NewRecorder()
 	r = httptest.NewRequest("GET", "/somewhere", nil)
@@ -381,10 +381,10 @@ func TestRegisterMuxWithOptions(t *testing.T) {
 		io.WriteString(rw, "API CRUD CALLED")
 	})
 
-	api.NotFoundHandler = func(rw http.ResponseWriter, r *http.Request) {
+	api.SetNotFoundHandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		rw.WriteHeader(404)
 		io.WriteString(rw, "no matching api route")
-	}
+	})
 
 	assets := New(MatchTrailingSlash(true))
 

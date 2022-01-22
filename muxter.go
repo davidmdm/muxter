@@ -2,7 +2,6 @@ package muxter
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"path"
 	"strings"
@@ -64,12 +63,10 @@ func (n *node) lookup(url string) (targetMux *Mux, targetNode *node, params map[
 	for {
 		if n.mux != nil {
 			m, node, p, d := n.mux.root.lookup(url)
-			if node != nil {
-				if m == nil {
-					m = n.mux
-				}
-				return m, node, p, d + maxUrlLength - len(url)
+			if m == nil {
+				m = n.mux
 			}
+			return m, node, p, d + maxUrlLength - len(url)
 		}
 
 		if n.subtreeHandler != nil {
@@ -192,7 +189,7 @@ func (n *node) clone(middlewares ...Middleware) *node {
 // Mux is a request multiplexer with the same routing behaviour as the standard libraries net/http ServeMux
 type Mux struct {
 	root               node
-	NotFoundHandler    http.HandlerFunc
+	notFoundHandler    http.Handler
 	middlewares        []Middleware
 	matchTrailingSlash bool
 }
@@ -244,8 +241,8 @@ func (m *Mux) ServeHTTP(res http.ResponseWriter, req *http.Request) {
 	}
 
 	if handler == nil {
-		if targetMux.NotFoundHandler != nil {
-			handler = targetMux.NotFoundHandler
+		if targetMux.notFoundHandler != nil {
+			handler = targetMux.notFoundHandler
 		} else {
 			handler = defaultNotFoundHandler
 		}
@@ -256,6 +253,14 @@ func (m *Mux) ServeHTTP(res http.ResponseWriter, req *http.Request) {
 	}
 
 	handler.ServeHTTP(res, req)
+}
+
+func (m *Mux) SetNotFoundHandler(handler http.Handler) {
+	m.notFoundHandler = WithMiddleware(handler, m.middlewares...)
+}
+
+func (m *Mux) SetNotFoundHandlerFunc(handler http.HandlerFunc) {
+	m.SetNotFoundHandler(handler)
 }
 
 // Use registers global middlewares for your routes. Only routes registered after the call to use will be affected
@@ -278,9 +283,7 @@ func (m *Mux) HandleFunc(pattern string, handler http.HandlerFunc, middlewares .
 func (m *Mux) Handle(pattern string, handler http.Handler, middlewares ...Middleware) {
 	handler = WithMiddleware(handler, append(m.middlewares, middlewares...)...)
 
-	node, remainder := m.root.traverse(pattern)
-
-	if remainder == "/" {
+	if node, remainder := m.root.traverse(pattern); remainder == "/" {
 		node.subtreeHandler = handler
 	} else {
 		node.fixedHandler = handler
@@ -291,7 +294,11 @@ func (m *Mux) Handle(pattern string, handler http.Handler, middlewares ...Middle
 // Middlewares are called in this order: parent global middlewares, middlewares passed here, child mux global middlewares and child middlewares.
 func (m *Mux) RegisterMux(pattern string, mux *Mux, middlewares ...Middleware) {
 	n, _ := m.root.traverse(pattern)
-	n.mux = mux.clone(concatMiddlewares(m.middlewares, middlewares)...)
+	clone := mux.clone(concatMiddlewares(m.middlewares, middlewares)...)
+	if clone.notFoundHandler == nil {
+		clone.notFoundHandler = m.notFoundHandler
+	}
+	n.mux = clone
 }
 
 func (m *Mux) clone(middlewares ...Middleware) *Mux {
@@ -299,7 +306,7 @@ func (m *Mux) clone(middlewares ...Middleware) *Mux {
 	clone := &Mux{
 		root:               *m.root.clone(middlewares...),
 		middlewares:        middlewares,
-		NotFoundHandler:    m.NotFoundHandler,
+		notFoundHandler:    WithMiddleware(m.notFoundHandler, middlewares...),
 		matchTrailingSlash: m.matchTrailingSlash,
 	}
 	return clone
@@ -432,7 +439,6 @@ func (mh MethodHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 }
 
 func concatMiddlewares(stacks ...[]Middleware) []Middleware {
-	fmt.Println("YOLO", stacks)
 	var middlewares []Middleware
 	for _, stack := range stacks {
 		middlewares = append(middlewares, stack...)

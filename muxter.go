@@ -376,27 +376,16 @@ func cleanPath(p string) string {
 }
 
 func split(pattern string) (head, rest string) {
-	if pattern == "" {
-		return "", ""
-	}
-
-	if pattern == "/" {
-		return "", "/"
-	}
-
-	if pattern[0] == '/' {
+	if len(pattern) > 1 && pattern[0] == '/' {
 		pattern = pattern[1:]
 	}
 
-	var idx int
-	for _, b := range []byte(pattern) {
-		if b == '/' {
-			break
-		}
-		idx++
+	var i int
+	for i < len(pattern) && pattern[i] != '/' {
+		i++
 	}
 
-	return pattern[:idx], pattern[idx:]
+	return pattern[:i], pattern[i:]
 }
 
 type MethodHandler struct {

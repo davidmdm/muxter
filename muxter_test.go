@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 )
 
@@ -310,8 +311,7 @@ func TestRegisterMux(t *testing.T) {
 		func(rw http.ResponseWriter, r *http.Request) {},
 		func(h http.Handler) http.Handler {
 			return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-				rw.Header().Set("child_header_1", "child_header_1")
-				rw.Header().Set("parent_header_1", "child_header_1")
+				rw.Header().Add("x-header", "child")
 				h.ServeHTTP(rw, r)
 			})
 		},
@@ -322,8 +322,7 @@ func TestRegisterMux(t *testing.T) {
 	parent.Use(
 		func(h http.Handler) http.Handler {
 			return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-				rw.Header().Set("parent_header_1", "parent_header_1")
-				rw.Header().Set("parent_header_2", "parent_header_2")
+				rw.Header().Add("x-header", "parent")
 				h.ServeHTTP(rw, r)
 			})
 		},
@@ -336,15 +335,11 @@ func TestRegisterMux(t *testing.T) {
 
 	parent.ServeHTTP(rw, r)
 
-	expectedHeaders := map[string]string{
-		"parent_header_1": "parent_header_1",
-		"parent_header_2": "parent_header_2",
+	expectedHeaders := http.Header{
+		"X-Header": {"parent"},
 	}
-
-	for key, expected := range expectedHeaders {
-		if actual := rw.Header().Get(key); actual != expected {
-			t.Errorf("expected /parent request to set header %q to %q but got %q", key, expected, actual)
-		}
+	if !reflect.DeepEqual(expectedHeaders, rw.Header()) {
+		t.Errorf("expected headers to be %+v but got %+v", expectedHeaders, rw.Header())
 	}
 
 	if len(rw.Header()) != len(expectedHeaders) {
@@ -355,16 +350,12 @@ func TestRegisterMux(t *testing.T) {
 
 	parent.ServeHTTP(rw, r)
 
-	expectedHeaders = map[string]string{
-		"child_header_1":  "child_header_1",
-		"parent_header_1": "child_header_1",
-		"parent_header_2": "parent_header_2",
+	expectedHeaders = http.Header{
+		"X-Header": {"parent", "child"},
 	}
+	if !reflect.DeepEqual(expectedHeaders, rw.Header()) {
+		t.Errorf("expected headers to be %+v but got %+v", expectedHeaders, rw.Header())
 
-	for key, expected := range expectedHeaders {
-		if actual := rw.Header().Get(key); actual != expected {
-			t.Errorf("expected /parent request to set header %q to %q but got %q", key, expected, actual)
-		}
 	}
 
 	if len(rw.Header()) != len(expectedHeaders) {
@@ -374,6 +365,11 @@ func TestRegisterMux(t *testing.T) {
 
 func TestRegisterMuxWithOptions(t *testing.T) {
 	root := New()
+
+	root.SetNotFoundHandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		rw.WriteHeader(404)
+		io.WriteString(rw, "are you lost?")
+	})
 
 	api := New()
 
@@ -441,6 +437,19 @@ func TestRegisterMuxWithOptions(t *testing.T) {
 			Path: "/assets/image.jpg/",
 			ResponseExpectations: func(t *testing.T, r *httptest.ResponseRecorder) {
 				expected := "IMAGE.JPG"
+				if actual := r.Body.String(); actual != expected {
+					t.Errorf("expected body to be %q but got %q", expected, actual)
+				}
+			},
+		},
+		{
+			Name: "use root not found handler from assets",
+			Path: "/assets/unknown.mp4",
+			ResponseExpectations: func(t *testing.T, r *httptest.ResponseRecorder) {
+				if r.Code != 404 {
+					t.Errorf("expected code 404 but got %d", r.Code)
+				}
+				expected := "are you lost?"
 				if actual := r.Body.String(); actual != expected {
 					t.Errorf("expected body to be %q but got %q", expected, actual)
 				}

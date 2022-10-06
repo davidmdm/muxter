@@ -29,7 +29,7 @@ type node struct {
 	subtreeHandler http.Handler
 }
 
-func (n *node) lookup(url string, p map[string]string) (targetMux *Mux, targetNode *node, params map[string]string, depth int) {
+func (n *node) lookup(url string, p map[string]string) (targetNode *node, params map[string]string, depth int) {
 	var key string
 	var subtreeNode *node
 	var subtreeDepth int
@@ -58,9 +58,9 @@ func (n *node) lookup(url string, p map[string]string) (targetMux *Mux, targetNo
 		max := -1
 
 		for wildcard, wildNode := range n.wildcards {
-			m, n, p, c := wildNode.lookup(url, params)
-			if (n != nil || m != nil) && c > max {
-				targetMux, targetNode, params, max = m, n, p, c
+			n, p, c := wildNode.lookup(url, params)
+			if n != nil && c > max {
+				targetNode, params, max = n, p, c
 				param = wildcard
 			}
 		}
@@ -74,18 +74,18 @@ func (n *node) lookup(url string, p map[string]string) (targetMux *Mux, targetNo
 		}
 		params[param] = key
 
-		return targetMux, targetNode, params, maxUrlLength - len(url) + max
+		return targetNode, params, maxUrlLength - len(url) + max
 	}
 
 	if key == "" {
-		return nil, n, params, maxUrlLength
+		return n, params, maxUrlLength
 	}
 
 	if subtreeNode != nil {
-		return nil, subtreeNode, params, subtreeDepth
+		return subtreeNode, params, subtreeDepth
 	}
 
-	return nil, nil, nil, 0
+	return nil, nil, 0
 }
 
 func (n *node) traverse(pattern string) (target *node, remainder string) {
@@ -152,10 +152,8 @@ func New(options ...MuxOption) *Mux {
 func (m *Mux) ServeHTTP(res http.ResponseWriter, req *http.Request) {
 	path := cleanPath(req.URL.Path)
 	ctxParams, _ := req.Context().Value(paramKey).(map[string]string)
-	targetMux, node, params, length := m.root.lookup(path, ctxParams)
-	if targetMux == nil {
-		targetMux = m
-	}
+	node, params, length := m.root.lookup(path, ctxParams)
+
 	if ctxParams == nil {
 		defer pool.Put(params)
 	}
@@ -170,7 +168,7 @@ func (m *Mux) ServeHTTP(res http.ResponseWriter, req *http.Request) {
 		} else if trailingSlash {
 			if node.subtreeHandler != nil {
 				handler = node.subtreeHandler
-			} else if targetMux.matchTrailingSlash && node.fixedHandler != nil {
+			} else if m.matchTrailingSlash && node.fixedHandler != nil {
 				handler = node.fixedHandler
 			}
 		} else if node.fixedHandler != nil {
@@ -181,8 +179,8 @@ func (m *Mux) ServeHTTP(res http.ResponseWriter, req *http.Request) {
 	}
 
 	if handler == nil {
-		if targetMux.notFoundHandler != nil {
-			handler = targetMux.notFoundHandler
+		if m.notFoundHandler != nil {
+			handler = m.notFoundHandler
 		} else {
 			handler = defaultNotFoundHandler
 		}

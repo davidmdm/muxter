@@ -4,7 +4,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"reflect"
 	"testing"
 )
 
@@ -72,7 +71,6 @@ func TestRouting(t *testing.T) {
 			if count := len(tc.InvokedHandler.ServeHTTPCalls()); count != 1 {
 				t.Fatalf("expected handler to be invoked once but was invoked %d times", count)
 			}
-
 		})
 	}
 }
@@ -121,7 +119,6 @@ func TestParams(t *testing.T) {
 	if callCount := len(handler.ServeHTTPCalls()); callCount != 2 {
 		t.Errorf("expected handler to be called twice but was called %d times", callCount)
 	}
-
 }
 
 func TestSubdirRedirect(t *testing.T) {
@@ -281,204 +278,6 @@ func TestCustomNotFoundHandler(t *testing.T) {
 	}
 }
 
-func TestRegisterMux(t *testing.T) {
-	child := New()
-
-	child.HandleFunc(
-		"/child",
-		func(rw http.ResponseWriter, r *http.Request) {},
-		func(h http.Handler) http.Handler {
-			return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-				rw.Header().Add("x-header", "child")
-				h.ServeHTTP(rw, r)
-			})
-		},
-	)
-
-	parent := New()
-
-	parent.Use(
-		func(h http.Handler) http.Handler {
-			return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-				rw.Header().Add("x-header", "parent")
-				h.ServeHTTP(rw, r)
-			})
-		},
-	)
-
-	parent.HandleFunc("/parent", func(rw http.ResponseWriter, r *http.Request) {})
-	parent.RegisterMux("/registered", child)
-
-	rw, r := httptest.NewRecorder(), httptest.NewRequest("GET", "/parent", nil)
-
-	parent.ServeHTTP(rw, r)
-
-	expectedHeaders := http.Header{
-		"X-Header": {"parent"},
-	}
-	if !reflect.DeepEqual(expectedHeaders, rw.Header()) {
-		t.Errorf("expected headers to be %+v but got %+v", expectedHeaders, rw.Header())
-	}
-
-	if len(rw.Header()) != len(expectedHeaders) {
-		t.Errorf("expected response headers to have length %d but got %d", len(expectedHeaders), len(rw.Header()))
-	}
-
-	rw, r = httptest.NewRecorder(), httptest.NewRequest("GET", "/registered/child", nil)
-
-	parent.ServeHTTP(rw, r)
-
-	expectedHeaders = http.Header{
-		"X-Header": {"parent", "child"},
-	}
-	if !reflect.DeepEqual(expectedHeaders, rw.Header()) {
-		t.Errorf("expected headers to be %+v but got %+v", expectedHeaders, rw.Header())
-
-	}
-
-	if len(rw.Header()) != len(expectedHeaders) {
-		t.Errorf("expected response headers to have length %d but got %d", len(expectedHeaders), len(rw.Header()))
-	}
-}
-
-func TestRegisterMuxWithOptions(t *testing.T) {
-	root := New()
-
-	root.SetNotFoundHandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-		rw.WriteHeader(404)
-		io.WriteString(rw, "are you lost?")
-	})
-
-	api := New()
-
-	api.HandleFunc("/crud", func(rw http.ResponseWriter, r *http.Request) {
-		io.WriteString(rw, "API CRUD CALLED")
-	})
-
-	api.SetNotFoundHandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-		rw.WriteHeader(404)
-		io.WriteString(rw, "no matching api route")
-	})
-
-	assets := New(MatchTrailingSlash(true))
-
-	assets.HandleFunc("/image.jpg", func(rw http.ResponseWriter, r *http.Request) {
-		io.WriteString(rw, "IMAGE.JPG")
-	})
-
-	root.RegisterMux("/api", api)
-	root.RegisterMux("/assets", assets)
-
-	testcases := []struct {
-		Name                 string
-		Path                 string
-		ResponseExpectations func(t *testing.T, r *httptest.ResponseRecorder)
-	}{
-		{
-			Name: "calls api successfully",
-			Path: "/api/crud",
-			ResponseExpectations: func(t *testing.T, r *httptest.ResponseRecorder) {
-				if r.Code != 200 {
-					t.Errorf("expected response to be 200 but got %d", r.Code)
-				}
-				expected := "API CRUD CALLED"
-				if actual := r.Body.String(); expected != actual {
-					t.Errorf("expected body to be %q but got %q", expected, actual)
-				}
-			},
-		},
-		{
-			Name: "api does not match trailing slash",
-			Path: "/api/crud/",
-			ResponseExpectations: func(t *testing.T, r *httptest.ResponseRecorder) {
-				if r.Code != 404 {
-					t.Errorf("expected 404 but got %d", r.Code)
-				}
-				expected := "no matching api route"
-				if actual := r.Body.String(); actual != expected {
-					t.Errorf("expected body to be %q but got %q", expected, actual)
-				}
-			},
-		},
-		{
-			Name: "asset route matches",
-			Path: "/assets/image.jpg",
-			ResponseExpectations: func(t *testing.T, r *httptest.ResponseRecorder) {
-				expected := "IMAGE.JPG"
-				if actual := r.Body.String(); actual != expected {
-					t.Errorf("expected body to be %q but got %q", expected, actual)
-				}
-			},
-		},
-		{
-			Name: "asset route matches trailing slash",
-			Path: "/assets/image.jpg/",
-			ResponseExpectations: func(t *testing.T, r *httptest.ResponseRecorder) {
-				expected := "IMAGE.JPG"
-				if actual := r.Body.String(); actual != expected {
-					t.Errorf("expected body to be %q but got %q", expected, actual)
-				}
-			},
-		},
-		{
-			Name: "use root not found handler from assets",
-			Path: "/assets/unknown.mp4",
-			ResponseExpectations: func(t *testing.T, r *httptest.ResponseRecorder) {
-				if r.Code != 404 {
-					t.Errorf("expected code 404 but got %d", r.Code)
-				}
-				expected := "are you lost?"
-				if actual := r.Body.String(); actual != expected {
-					t.Errorf("expected body to be %q but got %q", expected, actual)
-				}
-			},
-		},
-	}
-
-	for _, tc := range testcases {
-		t.Run(tc.Name, func(t *testing.T) {
-			req := httptest.NewRequest("GET", tc.Path, nil)
-			rec := httptest.NewRecorder()
-			root.ServeHTTP(rec, req)
-			tc.ResponseExpectations(t, rec)
-		})
-	}
-
-}
-
-func TestRegisterMuxParams(t *testing.T) {
-	child := New()
-
-	expectedParams := map[string]string{
-		"rootID":  "1",
-		"childID": "2",
-	}
-
-	handler := &HandlerMock{
-		ServeHTTPFunc: func(responseWriter http.ResponseWriter, request *http.Request) {
-			for key, expected := range expectedParams {
-				if actual := Param(request, key); actual != expected {
-					t.Errorf("expected param %q to be %q but got %q", key, expected, actual)
-				}
-			}
-		},
-	}
-
-	child.Handle("/child/:childID", handler)
-
-	root := New()
-
-	root.RegisterMux("/root/:rootID", child)
-
-	rw, r := httptest.NewRecorder(), httptest.NewRequest("GET", "/root/1/child/2", nil)
-
-	root.ServeHTTP(rw, r)
-
-	if count := len(handler.ServeHTTPCalls()); count != 1 {
-		t.Fatalf("expected handler to be called once but was called %d times", count)
-	}
-}
-
 func TestMethodHandler(t *testing.T) {
 	mux := New()
 
@@ -551,5 +350,33 @@ func TestMethodHandler(t *testing.T) {
 
 	if rw.Code != 405 {
 		t.Errorf("expected statusCode to be 405 but got %d", rw.Code)
+	}
+}
+
+func TestNestedMuxes(t *testing.T) {
+	child := New()
+	child.HandleFunc("/path/:id", func(w http.ResponseWriter, r *http.Request) {
+		p := Params(r)
+		if len(p) != 2 {
+			t.Errorf("expected 2 params but got: %d", len(p))
+		}
+		if id := Param(r, "id"); id != "id" {
+			t.Errorf("expected id param to equal id but got: %s", id)
+		}
+		if nested := Param(r, "nested"); nested != "nested" {
+			t.Errorf("expected nested param to equal nested but got: %s", nested)
+		}
+	})
+
+	root := New()
+	root.Handle("/some/deeply/:nested/", StripDepth(3, child))
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/some/deeply/nested/path/id", nil)
+
+	root.ServeHTTP(w, r)
+
+	if code := w.Code; code != 200 {
+		t.Errorf("expected code 200 but got %d", code)
 	}
 }

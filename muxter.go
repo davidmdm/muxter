@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"path"
 	"strings"
-	"sync"
 )
 
 var _ http.Handler = &Mux{}
@@ -23,52 +22,23 @@ var redirectToSubdirHandler http.HandlerFunc = func(rw http.ResponseWriter, r *h
 	rw.WriteHeader(http.StatusMovedPermanently)
 }
 
-type paramPool struct {
-	pool *sync.Pool
-}
-
-func (p paramPool) Get() map[string]string {
-	return p.pool.Get().(map[string]string)
-}
-
-func (p paramPool) Put(params map[string]string) {
-	if params == nil {
-		return
-	}
-	for k := range params {
-		delete(params, k)
-	}
-	p.pool.Put(params)
-}
-
-var pool = paramPool{
-	pool: &sync.Pool{New: func() interface{} { return make(map[string]string) }},
-}
-
 type node struct {
 	wildcards      map[string]*node
 	segments       map[string]*node
 	fixedHandler   http.Handler
 	subtreeHandler http.Handler
-	mux            *Mux
 }
 
-func (n *node) lookup(url string) (targetMux *Mux, targetNode *node, params map[string]string, depth int) {
+func (n *node) lookup(url string, p map[string]string) (targetMux *Mux, targetNode *node, params map[string]string, depth int) {
 	var key string
 	var subtreeNode *node
 	var subtreeDepth int
 
+	params = p
+
 	maxUrlLength := len(url)
 
 	for {
-		if n.mux != nil {
-			m, node, p, d := n.mux.root.lookup(url)
-			if m == nil {
-				m = n.mux
-			}
-			return m, node, p, d + maxUrlLength - len(url)
-		}
-
 		if n.subtreeHandler != nil {
 			subtreeNode = n
 			subtreeDepth = maxUrlLength - len(url)
@@ -88,8 +58,8 @@ func (n *node) lookup(url string) (targetMux *Mux, targetNode *node, params map[
 		max := -1
 
 		for wildcard, wildNode := range n.wildcards {
-			m, n, p, c := wildNode.lookup(url)
-			if n != nil && c > max {
+			m, n, p, c := wildNode.lookup(url, params)
+			if (n != nil || m != nil) && c > max {
 				targetMux, targetNode, params, max = m, n, p, c
 				param = wildcard
 			}
@@ -153,39 +123,6 @@ func (n *node) traverse(pattern string) (target *node, remainder string) {
 	return n, pattern
 }
 
-func (n *node) clone(middlewares ...Middleware) *node {
-	clone := new(node)
-
-	clone.mux = n.mux
-	if clone.mux != nil {
-		clone.mux = clone.mux.clone(middlewares...)
-	}
-
-	if n.fixedHandler != nil {
-		clone.fixedHandler = WithMiddleware(n.fixedHandler, middlewares...)
-	}
-
-	if n.subtreeHandler != nil {
-		clone.subtreeHandler = WithMiddleware(n.subtreeHandler, middlewares...)
-	}
-
-	if n.segments != nil {
-		clone.segments = make(map[string]*node)
-		for key, value := range n.segments {
-			clone.segments[key] = value.clone(middlewares...)
-		}
-	}
-
-	if n.wildcards != nil {
-		clone.wildcards = make(map[string]*node)
-		for key, value := range n.wildcards {
-			clone.wildcards[key] = value.clone(middlewares...)
-		}
-	}
-
-	return clone
-}
-
 // Mux is a request multiplexer with the same routing behaviour as the standard libraries net/http ServeMux
 type Mux struct {
 	root               node
@@ -214,11 +151,14 @@ func New(options ...MuxOption) *Mux {
 // ServeHTTP implements the net/http Handler interface.
 func (m *Mux) ServeHTTP(res http.ResponseWriter, req *http.Request) {
 	path := cleanPath(req.URL.Path)
-	targetMux, node, params, length := m.root.lookup(path)
+	ctxParams, _ := req.Context().Value(paramKey).(map[string]string)
+	targetMux, node, params, length := m.root.lookup(path, ctxParams)
 	if targetMux == nil {
 		targetMux = m
 	}
-	defer pool.Put(params)
+	if ctxParams == nil {
+		defer pool.Put(params)
+	}
 
 	trailingSlash := strings.HasSuffix(path, "/")
 
@@ -288,28 +228,6 @@ func (m *Mux) Handle(pattern string, handler http.Handler, middlewares ...Middle
 	} else {
 		node.fixedHandler = handler
 	}
-}
-
-// RegisterMux registers a mux at a given pattern. This allows for mux's to be composed.
-// Middlewares are called in this order: parent global middlewares, middlewares passed here, child mux global middlewares and child middlewares.
-func (m *Mux) RegisterMux(pattern string, mux *Mux, middlewares ...Middleware) {
-	n, _ := m.root.traverse(pattern)
-	clone := mux.clone(concatMiddlewares(m.middlewares, middlewares)...)
-	if clone.notFoundHandler == nil {
-		clone.notFoundHandler = m.notFoundHandler
-	}
-	n.mux = clone
-}
-
-func (m *Mux) clone(middlewares ...Middleware) *Mux {
-	middlewares = concatMiddlewares(middlewares, m.middlewares)
-	clone := &Mux{
-		root:               *m.root.clone(middlewares...),
-		middlewares:        middlewares,
-		notFoundHandler:    WithMiddleware(m.notFoundHandler, middlewares...),
-		matchTrailingSlash: m.matchTrailingSlash,
-	}
-	return clone
 }
 
 type paramKeyType int
@@ -427,10 +345,32 @@ func (mh MethodHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	defaultMethodNotAllowedHandler(rw, r)
 }
 
-func concatMiddlewares(stacks ...[]Middleware) []Middleware {
-	var middlewares []Middleware
-	for _, stack := range stacks {
-		middlewares = append(middlewares, stack...)
+func StripDepth(depth int, handler http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.URL.Path = stripPathDepth(r.URL.Path, depth)
+		handler.ServeHTTP(w, r)
+	})
+}
+
+func stripPathDepth(value string, depth int) string {
+	if depth == 0 {
+		return value
 	}
-	return middlewares
+
+	value = strings.TrimPrefix(value, "/")
+	var seen int
+	var i int
+
+	for i = range value {
+		if value[i] == '/' {
+			seen++
+		}
+		if seen == depth {
+			break
+		}
+	}
+	if i == len(value) {
+		return "/"
+	}
+	return "/" + value[i+1:]
 }

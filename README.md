@@ -21,9 +21,6 @@ So why muxter?
 - It aims to route and work exactly as the standard library's http.ServeMux.
 - It matches path params.
 - It supports middleware.
-- Mux's can be easily composed. A mux can register another mux.
-- It's small.
-- It's a hundred percent standard library compatible.
 
 And most importantly it does not seek to do or become anything more,
 or have many options or be framework-y in anyway.
@@ -98,9 +95,9 @@ func main() {
 		muxter.POST, // Returns 405 if method is not POST
 	)
 
-	// Can register another mux to extend the current mux
-	mux.RegisterMux("/api/v1", GetAPIV1Mux(), V1AuthMiddleware)
-	mux.RegisterMux("/api/v2", GetAPIV2Mux(), V2AuthMiddleware)
+	// Muxes can be composed since a mux is simple a http.Handler
+	mux.Handle("/api/v1/", GetAPIV1Mux(), V1AuthMiddleware)
+	mux.Handle("/api/v2/", GetAPIV2Mux(), V2AuthMiddleware)
 
 	// Register different method handlers to the same route pattern
 	mux.Handle(

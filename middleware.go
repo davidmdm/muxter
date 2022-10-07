@@ -55,23 +55,10 @@ var (
 	// the dumps the body if the method is HEAD, making it safe for get and head logic to be the same.
 	GET Middleware = func(h http.Handler) http.Handler {
 		return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-			method := strings.ToUpper(r.Method)
-
-			if method != "HEAD" && method != "GET" {
-				http.Error(rw, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+			if r.Method != "GET" {
+				HEAD(h).ServeHTTP(rw, r)
 				return
 			}
-
-			if method == "HEAD" {
-				headWriter := &headResponseWriter{rw, 0}
-				defer func() {
-					if length := rw.Header().Get("Content-Length"); length == "" {
-						rw.Header().Set("Content-Length", strconv.Itoa(headWriter.contentLength))
-					}
-				}()
-				rw = headWriter
-			}
-
 			h.ServeHTTP(rw, r)
 		})
 	}
@@ -79,7 +66,23 @@ var (
 	PATCH  = Method("PATCH")
 	PUT    = Method("PUT")
 	DELETE = Method("DELETE")
-	HEAD   = Method("HEAD")
+	HEAD   = func(h http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != "HEAD" {
+				http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+				return
+			}
+
+			headWriter := &headResponseWriter{w, 0}
+			defer func() {
+				if length := w.Header().Get("Content-Length"); length == "" {
+					w.Header().Set("Content-Length", strconv.Itoa(headWriter.contentLength))
+				}
+			}()
+
+			h.ServeHTTP(headWriter, r)
+		})
+	}
 )
 
 // Recover allows you to register a handler function should a panic occur in the stack.

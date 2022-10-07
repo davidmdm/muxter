@@ -279,78 +279,78 @@ func TestCustomNotFoundHandler(t *testing.T) {
 }
 
 func TestMethodHandler(t *testing.T) {
-	mux := New()
+	t.Run("happy", func(t *testing.T) {
+		mux := New()
 
-	methodHandler := new(MethodHandler)
-	*methodHandler = MakeMethodHandler(
-		map[string]http.Handler{
-			"get": http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		methodHandler := MethodHandler{
+			GET: http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 				io.WriteString(rw, "GET")
 			}),
-			"post": http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+			POST: http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 				io.WriteString(rw, "POST")
 			}),
-		},
-		nil,
-	)
+		}
 
-	mux.Handle(
-		"/methods",
-		methodHandler,
-	)
+		mux.Handle("/methods", methodHandler)
 
-	// GET
-	rw, r := httptest.NewRecorder(), httptest.NewRequest("get", "/methods", nil)
+		// GET
+		rw, r := httptest.NewRecorder(), httptest.NewRequest("get", "/methods", nil)
 
-	mux.ServeHTTP(rw, r)
+		mux.ServeHTTP(rw, r)
 
-	expectedBody := "GET"
-	if body := rw.Body.String(); body != expectedBody {
-		t.Errorf("expected body to be %q but got %q", expectedBody, body)
-	}
+		expectedBody := "GET"
+		if body := rw.Body.String(); body != expectedBody {
+			t.Errorf("expected body to be %q but got %q", expectedBody, body)
+		}
 
-	// POST
-	rw, r = httptest.NewRecorder(), httptest.NewRequest("POST", "/methods", nil)
+		// POST
+		rw, r = httptest.NewRecorder(), httptest.NewRequest("POST", "/methods", nil)
 
-	mux.ServeHTTP(rw, r)
+		mux.ServeHTTP(rw, r)
 
-	expectedBody = "POST"
-	if body := rw.Body.String(); body != expectedBody {
-		t.Errorf("expected body to be %q but got %q", expectedBody, body)
-	}
+		expectedBody = "POST"
+		if body := rw.Body.String(); body != expectedBody {
+			t.Errorf("expected body to be %q but got %q", expectedBody, body)
+		}
 
-	// PUT NOT FOUND
-	rw, r = httptest.NewRecorder(), httptest.NewRequest("PUT", "/methods", nil)
+		// PUT NOT FOUND
+		rw, r = httptest.NewRecorder(), httptest.NewRequest("PUT", "/methods", nil)
 
-	mux.ServeHTTP(rw, r)
+		mux.ServeHTTP(rw, r)
 
-	expectedBody = "Method Not Allowed\n"
-	if body := rw.Body.String(); body != expectedBody {
-		t.Errorf("expected body to be %q but got %q", expectedBody, body)
-	}
+		expectedBody = "Method Not Allowed\n"
+		if body := rw.Body.String(); body != expectedBody {
+			t.Errorf("expected body to be %q but got %q", expectedBody, body)
+		}
 
-	if rw.Code != 405 {
-		t.Errorf("expected statusCode to be 405 but got %d", rw.Code)
-	}
-
-	methodHandler.methodNotAllowedHandler = http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-		rw.WriteHeader(405)
-		io.WriteString(rw, "YO YO YO NO")
+		if rw.Code != 405 {
+			t.Errorf("expected statusCode to be 405 but got %d", rw.Code)
+		}
 	})
 
-	// PUT NOT FOUND
-	rw, r = httptest.NewRecorder(), httptest.NewRequest("PUT", "/methods", nil)
+	t.Run("custom not found handler", func(t *testing.T) {
+		mux := New()
 
-	mux.ServeHTTP(rw, r)
+		mux.Handle("/", MethodHandler{
+			MethodNotAllowedHandler: http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+				rw.WriteHeader(405)
+				io.WriteString(rw, "YO YO YO NO")
+			}),
+		})
 
-	expectedBody = "YO YO YO NO"
-	if body := rw.Body.String(); body != expectedBody {
-		t.Errorf("expected body to be %q but got %q", expectedBody, body)
-	}
+		w, r := httptest.NewRecorder(), httptest.NewRequest("GET", "/", nil)
 
-	if rw.Code != 405 {
-		t.Errorf("expected statusCode to be 405 but got %d", rw.Code)
-	}
+		mux.ServeHTTP(w, r)
+
+		expectedBody := "YO YO YO NO"
+		if body := w.Body.String(); body != expectedBody {
+			t.Errorf("expected body to be %q but got %q", expectedBody, body)
+		}
+
+		if w.Code != 405 {
+			t.Errorf("expected statusCode to be 405 but got %d", w.Code)
+		}
+	})
 }
 
 func TestNestedMuxes(t *testing.T) {

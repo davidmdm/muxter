@@ -102,20 +102,20 @@ func main() {
 	// Register different method handlers to the same route pattern
 	mux.Handle(
 		"/resource/:id",
-		muxter.MakeMethodHandler(
-			muxter.MethodHandlerMap{
-				"get": http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-					// get resource
-				}),
-				"put": http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-					// put resource
-				}),
-				"delete": http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-					// delete resource
-				}),
-			},
-			nil, // custom method not allowed handler goes here. If nil default 405 with default statusText.
-		),
+		muxter.MethodHandler{
+			GET: http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+				// get resource
+			}),
+			PUT: http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+				// put resource
+			}),
+			DELETE: http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+				// delete resource
+			}),
+			MethodNotAllowedHandler: http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+				// custom method not allowed handler
+ 			})
+		},
 	)
 
 	// Add a custom not found handler.

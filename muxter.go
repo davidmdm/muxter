@@ -266,40 +266,44 @@ func split(pattern string) (head, rest string) {
 }
 
 type MethodHandler struct {
-	handlers                map[string]http.Handler
-	methodNotAllowedHandler http.Handler
+	GET                     http.Handler
+	POST                    http.Handler
+	PUT                     http.Handler
+	PATCH                   http.Handler
+	HEAD                    http.Handler
+	DELETE                  http.Handler
+	MethodNotAllowedHandler http.Handler
 }
 
-type MethodHandlerMap = map[string]http.Handler
+func (mh MethodHandler) getHandler(method string) (handler http.Handler) {
+	defer func() {
+		if handler == nil {
+			if mh.MethodNotAllowedHandler == nil {
+				handler = defaultMethodNotAllowedHandler
+			} else {
+				handler = mh.MethodNotAllowedHandler
+			}
+		}
+	}()
 
-// MakeMethodHandler takes a map of http verbs to http handlers and a handler should no method match.
-// If nil is provided for the methodNotAllowedHandler the default handler will be used.
-func MakeMethodHandler(handlerMap MethodHandlerMap, methodNotAllowedHandler http.Handler) MethodHandler {
-	handlers := make(map[string]http.Handler)
-	for method, handler := range handlerMap {
-		handlers[strings.ToUpper(method)] = handler
-	}
-
-	if methodNotAllowedHandler == nil {
-		methodNotAllowedHandler = defaultMethodNotAllowedHandler
-	}
-
-	return MethodHandler{
-		handlers:                handlers,
-		methodNotAllowedHandler: methodNotAllowedHandler,
+	switch strings.ToUpper(method) {
+	case "GET":
+		return mh.GET
+	case "POST":
+		return mh.POST
+	case "DELETE":
+		return mh.DELETE
+	case "PUT":
+		return mh.PUT
+	case "PATCH":
+		return mh.PATCH
+	case "HEAD":
+		return mh.HEAD
+	default:
+		return nil
 	}
 }
 
 func (mh MethodHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if h := mh.handlers[strings.ToUpper(r.Method)]; h != nil {
-		h.ServeHTTP(w, r)
-		return
-	}
-
-	if h := mh.methodNotAllowedHandler; h != nil {
-		h.ServeHTTP(w, r)
-		return
-	}
-
-	defaultMethodNotAllowedHandler(w, r)
+	mh.getHandler(r.Method).ServeHTTP(w, r)
 }

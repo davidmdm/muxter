@@ -85,8 +85,8 @@ func TestParams(t *testing.T) {
 
 	handler.ServeHTTPFunc = func(responseWriter http.ResponseWriter, request *http.Request) {
 		params := Params(request)
-		if params != nil {
-			t.Errorf("expected params to be nil but got: %v", params)
+		if len(params) != 0 {
+			t.Errorf("expected params to be empty but got %v elements", len(params))
 		}
 	}
 

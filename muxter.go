@@ -9,17 +9,17 @@ import (
 
 var _ http.Handler = &Mux{}
 
-var defaultNotFoundHandler http.HandlerFunc = func(rw http.ResponseWriter, r *http.Request) {
-	http.Error(rw, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+var defaultNotFoundHandler http.HandlerFunc = func(w http.ResponseWriter, r *http.Request) {
+	http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 }
 
-var defaultMethodNotAllowedHandler http.HandlerFunc = func(rw http.ResponseWriter, r *http.Request) {
-	http.Error(rw, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+var defaultMethodNotAllowedHandler http.HandlerFunc = func(w http.ResponseWriter, r *http.Request) {
+	http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 }
 
-var redirectToSubdirHandler http.HandlerFunc = func(rw http.ResponseWriter, r *http.Request) {
-	rw.Header().Set("Location", r.URL.Path+"/")
-	rw.WriteHeader(http.StatusMovedPermanently)
+var redirectToSubdirHandler http.HandlerFunc = func(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Location", r.URL.Path+"/")
+	w.WriteHeader(http.StatusMovedPermanently)
 }
 
 type node struct {
@@ -69,9 +69,6 @@ func (n *node) lookup(url string, p map[string]string) (targetNode *node, params
 			break
 		}
 
-		if params == nil {
-			params = pool.Get()
-		}
 		params[param] = key
 
 		return targetNode, params, maxUrlLength - len(url) + max
@@ -149,14 +146,18 @@ func New(options ...MuxOption) *Mux {
 }
 
 // ServeHTTP implements the net/http Handler interface.
-func (m *Mux) ServeHTTP(res http.ResponseWriter, req *http.Request) {
-	path := cleanPath(req.URL.Path)
-	ctxParams, _ := req.Context().Value(paramKey).(map[string]string)
-	node, params, length := m.root.lookup(path, ctxParams)
+func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	path := cleanPath(r.URL.Path)
 
-	if ctxParams == nil {
+	params, _ := r.Context().Value(paramKey).(map[string]string)
+	shouldInjectParams := params == nil
+
+	if params == nil {
+		params = pool.Get()
 		defer pool.Put(params)
 	}
+
+	node, params, length := m.root.lookup(path, params)
 
 	trailingSlash := strings.HasSuffix(path, "/")
 
@@ -186,11 +187,11 @@ func (m *Mux) ServeHTTP(res http.ResponseWriter, req *http.Request) {
 		}
 	}
 
-	if params != nil {
-		*req = *req.WithContext(context.WithValue(req.Context(), paramKey, params))
+	if shouldInjectParams {
+		*r = *r.WithContext(context.WithValue(r.Context(), paramKey, params))
 	}
 
-	handler.ServeHTTP(res, req)
+	handler.ServeHTTP(w, r)
 }
 
 func (m *Mux) SetNotFoundHandler(handler http.Handler) {
@@ -226,46 +227,6 @@ func (m *Mux) Handle(pattern string, handler http.Handler, middlewares ...Middle
 	} else {
 		node.fixedHandler = handler
 	}
-}
-
-type paramKeyType int
-
-var paramKey paramKeyType
-
-// Param reads path params from the request
-func Param(r *http.Request, param string) string {
-	if r == nil {
-		return ""
-	}
-
-	if params, ok := r.Context().Value(paramKey).(map[string]string); ok && params != nil {
-		return params[param]
-	}
-
-	return ""
-}
-
-// Params returns all path params in a map. Prefer the simple Param to avoid memory allocations.
-func Params(r *http.Request) map[string]string {
-	if r == nil {
-		return nil
-	}
-
-	params, _ := r.Context().Value(paramKey).(map[string]string)
-	if params == nil {
-		return nil
-	}
-
-	// The params map belongs to a pool and will be put back and cleared once ServeHTTP is done.
-	// Should a user capture the map in a variable that outlives the lifetime of the handler, it
-	// would be very hard for them to understand where their params have gone. Hence return a copy
-	// of the params.
-	cpy := make(map[string]string)
-	for k, v := range params {
-		cpy[k] = v
-	}
-
-	return cpy
 }
 
 // Taken from standard library: package net/http.
@@ -329,16 +290,16 @@ func MakeMethodHandler(handlerMap MethodHandlerMap, methodNotAllowedHandler http
 	}
 }
 
-func (mh MethodHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
+func (mh MethodHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if h := mh.handlers[strings.ToUpper(r.Method)]; h != nil {
-		h.ServeHTTP(rw, r)
+		h.ServeHTTP(w, r)
 		return
 	}
 
 	if h := mh.methodNotAllowedHandler; h != nil {
-		h.ServeHTTP(rw, r)
+		h.ServeHTTP(w, r)
 		return
 	}
 
-	defaultMethodNotAllowedHandler(rw, r)
+	defaultMethodNotAllowedHandler(w, r)
 }

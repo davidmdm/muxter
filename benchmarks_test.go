@@ -58,12 +58,12 @@ func BenchmarkRoutingParamsNestedMuxes(b *testing.B) {
 	root := New()
 	root.Handle("/some/deeply/:nested/", StripDepth(3, child))
 
-	rw := httptest.NewRecorder()
+	w := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/some/deeply/nested/path/id", nil)
 
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		root.ServeHTTP(rw, r)
+		root.ServeHTTP(w, r)
 	}
 }

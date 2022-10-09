@@ -2,7 +2,6 @@ package muxter
 
 import (
 	"net/http"
-	"sync"
 )
 
 type paramKeyType int
@@ -37,32 +36,10 @@ func Params(r *http.Request) map[string]string {
 	// Should a user capture the map in a variable that outlives the lifetime of the handler, it
 	// would be very hard for them to understand where their params have gone. Hence return a copy
 	// of the params.
-	cpy := make(map[string]string)
+	cpy := make(map[string]string, len(params))
 	for k, v := range params {
 		cpy[k] = v
 	}
 
 	return cpy
-}
-
-type paramPool struct {
-	pool *sync.Pool
-}
-
-func (p paramPool) Get() map[string]string {
-	return p.pool.Get().(map[string]string)
-}
-
-func (p paramPool) Put(params map[string]string) {
-	if params == nil {
-		return
-	}
-	for k := range params {
-		delete(params, k)
-	}
-	p.pool.Put(params)
-}
-
-var pool = paramPool{
-	pool: &sync.Pool{New: func() interface{} { return make(map[string]string) }},
 }

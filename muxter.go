@@ -3,8 +3,10 @@ package muxter
 import (
 	"context"
 	"net/http"
-	"path"
 	"strings"
+
+	"github.com/davidmdm/muxter/internal/pool"
+	"github.com/davidmdm/muxter/internal/tree"
 )
 
 var _ http.Handler = &Mux{}
@@ -17,112 +19,9 @@ var defaultMethodNotAllowedHandler http.HandlerFunc = func(w http.ResponseWriter
 	http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 }
 
-var redirectToSubdirHandler http.HandlerFunc = func(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Location", r.URL.Path+"/")
-	w.WriteHeader(http.StatusMovedPermanently)
-}
-
-type node struct {
-	wildcards      map[string]*node
-	segments       map[string]*node
-	fixedHandler   http.Handler
-	subtreeHandler http.Handler
-}
-
-func (n *node) lookup(url string, p map[string]string) (targetNode *node, params map[string]string, depth int) {
-	var key string
-	var subtreeNode *node
-	var subtreeDepth int
-
-	params = p
-
-	maxUrlLength := len(url)
-
-	for {
-		if n.subtreeHandler != nil {
-			subtreeNode = n
-			subtreeDepth = maxUrlLength - len(url)
-		}
-
-		key, url = split(url)
-		if key == "" {
-			break
-		}
-
-		if next, ok := n.segments[key]; ok {
-			n = next
-			continue
-		}
-
-		var param string
-		max := -1
-
-		for wildcard, wildNode := range n.wildcards {
-			n, p, c := wildNode.lookup(url, params)
-			if n != nil && c > max {
-				targetNode, params, max = n, p, c
-				param = wildcard
-			}
-		}
-
-		if targetNode == nil {
-			break
-		}
-
-		params[param] = key
-
-		return targetNode, params, maxUrlLength - len(url) + max
-	}
-
-	if key == "" {
-		return n, params, maxUrlLength
-	}
-
-	if subtreeNode != nil {
-		return subtreeNode, params, subtreeDepth
-	}
-
-	return nil, nil, 0
-}
-
-func (n *node) traverse(pattern string) (target *node, remainder string) {
-	var key string
-	pattern = cleanPath(pattern)
-
-	for {
-		key, pattern = split(pattern)
-		if key == "" {
-			break
-		}
-
-		var nodeMap map[string]*node
-		if key[0] == ':' {
-			if n.wildcards == nil {
-				n.wildcards = make(map[string]*node)
-			}
-			nodeMap = n.wildcards
-			key = key[1:]
-		} else {
-			if n.segments == nil {
-				n.segments = make(map[string]*node)
-			}
-			nodeMap = n.segments
-		}
-
-		next, ok := nodeMap[key]
-		if !ok {
-			next = new(node)
-			nodeMap[key] = next
-		}
-		n = next
-	}
-
-	return n, pattern
-}
-
 // Mux is a request multiplexer with the same routing behaviour as the standard libraries net/http ServeMux
 type Mux struct {
-	root               node
+	root               *tree.Node
 	notFoundHandler    http.Handler
 	middlewares        []Middleware
 	matchTrailingSlash bool
@@ -130,6 +29,8 @@ type Mux struct {
 
 type MuxOption func(*Mux)
 
+// MatchTrailingSlash will allow a fixed handler to match a route with an inbound trailing slash
+// if no rooted subtree handler is registered at that route.
 func MatchTrailingSlash(value bool) MuxOption {
 	return func(m *Mux) {
 		m.matchTrailingSlash = value
@@ -138,7 +39,12 @@ func MatchTrailingSlash(value bool) MuxOption {
 
 // New returns a pointer to a new muxter.Mux
 func New(options ...MuxOption) *Mux {
-	m := &Mux{}
+	m := &Mux{
+		root:               &tree.Node{},
+		notFoundHandler:    defaultNotFoundHandler,
+		middlewares:        []func(http.Handler) http.Handler{},
+		matchTrailingSlash: false,
+	}
 	for _, apply := range options {
 		apply(m)
 	}
@@ -147,44 +53,25 @@ func New(options ...MuxOption) *Mux {
 
 // ServeHTTP implements the net/http Handler interface.
 func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	path := cleanPath(r.URL.Path)
-
 	params, _ := r.Context().Value(paramKey).(map[string]string)
 	shouldInjectParams := params == nil
 
 	if params == nil {
-		params = pool.Get()
-		defer pool.Put(params)
+		params = pool.Params.Get()
+		defer pool.Params.Put(params)
 	}
 
-	node, params, length := m.root.lookup(path, params)
-
-	trailingSlash := strings.HasSuffix(path, "/")
+	node, params := m.root.Lookup(r.URL.Path, params, m.matchTrailingSlash)
 
 	var handler http.Handler
-
-	if node != nil {
-		if length < len(path) {
-			handler = node.subtreeHandler
-		} else if trailingSlash {
-			if node.subtreeHandler != nil {
-				handler = node.subtreeHandler
-			} else if m.matchTrailingSlash && node.fixedHandler != nil {
-				handler = node.fixedHandler
-			}
-		} else if node.fixedHandler != nil {
-			handler = node.fixedHandler
-		} else if node.subtreeHandler != nil {
-			handler = redirectToSubdirHandler
-		}
-	}
-
-	if handler == nil {
-		if m.notFoundHandler != nil {
-			handler = m.notFoundHandler
-		} else {
+	if node == nil || node.Handler == nil {
+		if m.notFoundHandler == nil {
 			handler = defaultNotFoundHandler
+		} else {
+			handler = m.notFoundHandler
 		}
+	} else {
+		handler = node.Handler
 	}
 
 	if shouldInjectParams {
@@ -221,48 +108,7 @@ func (m *Mux) HandleFunc(pattern string, handler http.HandlerFunc, middlewares .
 // ie mux.HandleFunc(pattern, handler, m1, m2, m3) => request flow will pass through m1 then m2 then m3.
 func (m *Mux) Handle(pattern string, handler http.Handler, middlewares ...Middleware) {
 	handler = WithMiddleware(handler, append(m.middlewares, middlewares...)...)
-
-	if node, remainder := m.root.traverse(pattern); remainder == "/" {
-		node.subtreeHandler = handler
-	} else {
-		node.fixedHandler = handler
-	}
-}
-
-// Taken from standard library: package net/http.
-// cleanPath returns the canonical path for p, eliminating . and .. elements.
-func cleanPath(p string) string {
-	if p == "" {
-		return "/"
-	}
-	if p[0] != '/' {
-		p = "/" + p
-	}
-	np := path.Clean(p)
-	// path.Clean removes trailing slash except for root;
-	// put the trailing slash back if necessary.
-	if p[len(p)-1] == '/' && np != "/" {
-		// Fast path for common case of p being the string we want:
-		if len(p) == len(np)+1 && strings.HasPrefix(p, np) {
-			np = p
-		} else {
-			np += "/"
-		}
-	}
-	return np
-}
-
-func split(pattern string) (head, rest string) {
-	if len(pattern) > 1 && pattern[0] == '/' {
-		pattern = pattern[1:]
-	}
-
-	var i int
-	for i < len(pattern) && pattern[i] != '/' {
-		i++
-	}
-
-	return pattern[:i], pattern[i:]
+	m.root.Insert(pattern, handler)
 }
 
 type MethodHandler struct {

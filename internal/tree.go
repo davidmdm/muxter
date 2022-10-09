@@ -7,14 +7,14 @@ import (
 type Node struct {
 	Key      string
 	Children []*Node
+	Value    *string
 }
 
-func (node *Node) Insert(key string) {
+func (node *Node) Insert(key string, value string) {
 	if key == "" {
 		return
 	}
 
-	var matched bool
 	for i, n := range node.Children {
 		if key == n.Key {
 			return
@@ -24,45 +24,43 @@ func (node *Node) Insert(key string) {
 		if cp == 0 {
 			continue
 		}
-		matched = true
 
 		if cp == len(n.Key) {
-			n.Insert(key[cp:])
+			n.Insert(key[cp:], value)
 			return
 		}
 
-		prefix := &Node{
-			Key:      key[:cp],
-			Children: []*Node{},
+		n.Key = n.Key[cp:]
+
+		if cp == len(key) {
+			node.Children[i] = &Node{
+				Key:      key,
+				Children: []*Node{n},
+				Value:    &value,
+			}
+			return
 		}
 
-		if len(n.Key) > cp {
-			n.Key = n.Key[cp:]
-			prefix.Children = append(prefix.Children, n)
+		node.Children[i] = &Node{
+			Key: key[:cp],
+			Children: []*Node{
+				n,
+				{
+					Key:      key[cp:],
+					Children: []*Node{},
+					Value:    &value,
+				},
+			},
 		}
-		if len(key) > cp {
-			prefix.Children = append(prefix.Children, &Node{
-				Key:      key[cp:],
-				Children: []*Node{},
-			})
-		}
 
-		node.Children[i] = prefix
-
-		break
-	}
-
-	if matched {
 		return
 	}
 
 	node.Children = append(node.Children, &Node{
 		Key:      key,
 		Children: []*Node{},
+		Value:    &value,
 	})
-
-	print(node, "", "  ")
-	fmt.Println("---------------------------------------")
 }
 
 func min(a, b int) int {
@@ -91,21 +89,50 @@ func NewRootTree() *Node {
 func main() {
 	root := NewRootTree()
 
-	root.Insert("/")
-	root.Insert("/api/classes")
-	root.Insert("/api/classes")
+	fmt.Println("---------------------")
 
-	root.Insert("/api/class")
-	root.Insert("/api/book")
-	root.Insert("/public")
-	root.Insert("/app")
-	root.Insert("jesus")
+	root.Insert("/", "root")
+	print(root, "", "  ")
 
+	fmt.Println("---------------------")
+
+	root.Insert("/api/classes", "get all classes")
+	print(root, "", "  ")
+
+	fmt.Println("---------------------")
+
+	root.Insert("/api/classes", "copy")
+
+	fmt.Println("---------------------")
+
+	root.Insert("/api/class", "get single class")
+	print(root, "", "  ")
+
+	fmt.Println("---------------------")
+
+	root.Insert("/api/book", "get a book")
+	print(root, "", "  ")
+
+	fmt.Println("---------------------")
+
+	root.Insert("/public/", "public root")
+	print(root, "", "  ")
+
+	fmt.Println("---------------------")
+
+	root.Insert("/app/", "app root")
+	print(root, "", "  ")
+	fmt.Println("---------------------")
+	root.Insert("jesus", "what would jesus do?")
 	print(root, "", "  ")
 }
 
 func print(n *Node, prefix, indent string) {
-	fmt.Printf("%s%q\n", prefix, n.Key)
+	value := "<nil>"
+	if n.Value != nil {
+		value = *n.Value
+	}
+	fmt.Printf("%s%q (%s)\n", prefix, n.Key, value)
 	for _, c := range n.Children {
 		print(c, prefix+indent, indent)
 	}

@@ -1,7 +1,7 @@
-package main
+package tree
 
 import (
-	"fmt"
+	"net/http"
 	"strings"
 )
 
@@ -12,50 +12,47 @@ const (
 
 type Node struct {
 	Key      string
-	Value    *string
+	Handler  http.Handler
 	Children []*Node
 	Wildcard *Node
 	Type     int
 }
 
-func (n *Node) String() string {
-	if n == nil {
-		return "<nil>"
+func (node *Node) Insert(path string, handler http.Handler) {
+	if handler == nil {
+		panic("http handler cannot be nil")
 	}
-	return fmt.Sprintf("%+v", *n)
-}
 
-func (node *Node) Insert(key string, value *string) {
-	colonIndex := strings.IndexByte(key, ':')
+	colonIndex := strings.IndexByte(path, ':')
 	if colonIndex == -1 {
-		node.insert(key, value)
+		node.insert(path, handler)
 		return
 	}
 
-	pre := key[:colonIndex]
+	pre := path[:colonIndex]
 	node = node.insert(pre, nil)
 
-	post := key[colonIndex:]
+	post := path[colonIndex:]
 
 	slashIdx := strings.IndexByte(post, '/')
-	if slashIdx == -1 || len(post) == slashIdx+1 {
-		node.insert(post, value)
+	if slashIdx == -1 {
+		node.insert(post, handler)
 		return
 	}
 
 	node = node.insert(post[:slashIdx], nil)
-	node.Insert(post[slashIdx:], value)
+	node.Insert(post[slashIdx:], handler)
 }
 
-func (node *Node) insert(key string, value *string) *Node {
-	if key == "" {
+func (node *Node) insert(path string, handler http.Handler) *Node {
+	if path == "" {
 		return node
 	}
 
-	if key[0] == ':' {
+	if path[0] == ':' {
 		node.Wildcard = &Node{
-			Key:      key[1:],
-			Value:    value,
+			Key:      path[1:],
+			Handler:  handler,
 			Children: []*Node{},
 			Wildcard: nil,
 			Type:     Wildcard,
@@ -64,38 +61,38 @@ func (node *Node) insert(key string, value *string) *Node {
 	}
 
 	for i, n := range node.Children {
-		if key == n.Key {
+		if path == n.Key {
 			return n
 		}
 
-		cp := commonPrefixLength(n.Key, key)
+		cp := commonPrefixLength(n.Key, path)
 		if cp == 0 {
 			continue
 		}
 
 		if cp == len(n.Key) {
-			return n.insert(key[cp:], value)
+			return n.insert(path[cp:], handler)
 		}
 
 		n.Key = n.Key[cp:]
 
-		if cp == len(key) {
+		if cp == len(path) {
 			node.Children[i] = &Node{
-				Key:      key,
+				Key:      path,
 				Children: []*Node{n},
-				Value:    value,
+				Handler:  handler,
 			}
 			return node.Children[i]
 		}
 
 		targetNode := &Node{
-			Key:      key[cp:],
+			Key:      path[cp:],
 			Children: []*Node{},
-			Value:    value,
+			Handler:  handler,
 		}
 
 		node.Children[i] = &Node{
-			Key:      key[:cp],
+			Key:      path[:cp],
 			Children: []*Node{n, targetNode},
 		}
 
@@ -103,9 +100,9 @@ func (node *Node) insert(key string, value *string) *Node {
 	}
 
 	targetNode := &Node{
-		Key:      key,
+		Key:      path,
 		Children: []*Node{},
-		Value:    value,
+		Handler:  handler,
 	}
 
 	node.Children = append(node.Children, targetNode)
@@ -118,13 +115,13 @@ func (node *Node) Lookup(path string, params map[string]string) (*Node, map[stri
 
 Walk:
 	for {
-		if node.IsSubdirNode() {
+		if node.IsSubdirNode() && node.Handler != nil {
 			subdirNode = node
 		}
 		if path == "" {
 			return subdirNode, params
 		}
-		if path == node.Key {
+		if path == node.Key && node.Type == Static {
 			return node, params
 		}
 
@@ -147,7 +144,7 @@ Walk:
 				continue
 			}
 
-			node, path = n, path[1:]
+			node, path = n, path[i:]
 			continue Walk
 		}
 

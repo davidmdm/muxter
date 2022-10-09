@@ -114,39 +114,54 @@ func (node *Node) insert(key string, value *string) *Node {
 }
 
 func (node *Node) Lookup(path string, params map[string]string) (*Node, map[string]string) {
-	if path == "" {
-		return nil, params
-	}
-	if path == node.Key {
-		return node, params
-	}
+	var subdirNode *Node
 
-	if node.Type == Wildcard {
-		slashIdx := strings.IndexByte(path, '/')
-		if slashIdx == -1 {
-			params[node.Key] = path
+Walk:
+	for {
+		if node.IsSubdirNode() {
+			subdirNode = node
+		}
+		if path == "" {
+			return subdirNode, params
+		}
+		if path == node.Key {
 			return node, params
 		}
-		params[node.Key] = path[:slashIdx]
-		path = path[slashIdx:]
-	}
 
-	for _, n := range node.Children {
-		if path == n.Key {
-			return n, params
+		if node.Type == Wildcard {
+			slashIdx := strings.IndexByte(path, '/')
+			if slashIdx == -1 {
+				params[node.Key] = path
+				return node, params
+			}
+			params[node.Key] = path[:slashIdx]
+			path = path[slashIdx:]
 		}
-		i := commonPrefixLength(path, n.Key)
-		if i == 0 {
-			continue
+
+		for _, n := range node.Children {
+			if path == n.Key {
+				return n, params
+			}
+			i := commonPrefixLength(path, n.Key)
+			if i == 0 {
+				continue
+			}
+
+			node, path = n, path[1:]
+			continue Walk
 		}
-		return n.Lookup(path[i:], params)
-	}
 
-	if node.Wildcard != nil {
-		return node.Wildcard.Lookup(path, params)
-	}
+		if node.Wildcard != nil {
+			node = node.Wildcard
+			continue Walk
+		}
 
-	return nil, params
+		return subdirNode, params
+	}
+}
+
+func (node *Node) IsSubdirNode() bool {
+	return node != nil && strings.HasSuffix(node.Key, "/")
 }
 
 func min(a, b int) int {
@@ -172,86 +187,86 @@ func NewRootTree() *Node {
 	}
 }
 
-func main() {
-	root := NewRootTree()
+// func main() {
+// 	root := NewRootTree()
 
-	root.Insert("/public/index.js", ptr("index js"))
-	root.Insert("/public/index.html", ptr("my index html"))
-	root.Insert("/context/:ctx/policy/:id", ptr("My PTR"))
+// 	root.Insert("/public/index.js", ptr("index js"))
+// 	root.Insert("/public/index.html", ptr("my index html"))
+// 	root.Insert("/context/:ctx/policy/:id", ptr("My PTR"))
 
-	root.Insert("/public/", ptr("root public directory"))
+// 	root.Insert("/public/", ptr("root public directory"))
 
-	p := map[string]string{}
+// 	p := map[string]string{}
 
-	node, params := root.Lookup("/public/somefile.txt", p)
-	fmt.Println(node, params)
+// 	node, params := root.Lookup("/public/somefile.txt", p)
+// 	fmt.Println(node, params)
 
-	// fmt.Println("---------------------")
+// 	// fmt.Println("---------------------")
 
-	// root.Insert("/", ptr("root"))
-	// print(root, "", "  ", false)
+// 	// root.Insert("/", ptr("root"))
+// 	// print(root, "", "  ", false)
 
-	// fmt.Println("---------------------")
+// 	// fmt.Println("---------------------")
 
-	// root.Insert("/api/classes", ptr("get all classes"))
-	// print(root, "", "  ", false)
+// 	// root.Insert("/api/classes", ptr("get all classes"))
+// 	// print(root, "", "  ", false)
 
-	// fmt.Println("---------------------")
+// 	// fmt.Println("---------------------")
 
-	// root.Insert("/api/classes/:id", ptr("copy"))
-	// print(root, "", "  ", false)
+// 	// root.Insert("/api/classes/:id", ptr("copy"))
+// 	// print(root, "", "  ", false)
 
-	// fmt.Println("---------------------")
+// 	// fmt.Println("---------------------")
 
-	// root.Insert("/api/class", ptr("get single class"))
-	// print(root, "", "  ", false)
+// 	// root.Insert("/api/class", ptr("get single class"))
+// 	// print(root, "", "  ", false)
 
-	// fmt.Println("---------------------")
+// 	// fmt.Println("---------------------")
 
-	// root.Insert("/api/book", ptr("get a book"))
-	// print(root, "", "  ", false)
+// 	// root.Insert("/api/book", ptr("get a book"))
+// 	// print(root, "", "  ", false)
 
-	// fmt.Println("---------------------")
+// 	// fmt.Println("---------------------")
 
-	// root.Insert("/public/", ptr("public root"))
-	// print(root, "", "  ", false)
+// 	// root.Insert("/public/", ptr("public root"))
+// 	// print(root, "", "  ", false)
 
-	// fmt.Println("---------------------")
+// 	// fmt.Println("---------------------")
 
-	// root.Insert("/app/", ptr("app root"))
-	// print(root, "", "  ", false)
+// 	// root.Insert("/app/", ptr("app root"))
+// 	// print(root, "", "  ", false)
 
-	// fmt.Println("---------------------")
+// 	// fmt.Println("---------------------")
 
-	// root.Insert("jesus", ptr("what would jesus do?"))
+// 	// root.Insert("jesus", ptr("what would jesus do?"))
 
-	// print(root, "", "  ", false)
-}
+// 	// print(root, "", "  ", false)
+// }
 
-func print(n *Node, prefix, indent string, wild bool) {
-	if n == nil {
-		return
-	}
+// func print(n *Node, prefix, indent string, wild bool) {
+// 	if n == nil {
+// 		return
+// 	}
 
-	value := "<nil>"
-	if n.Value != nil {
-		value = *n.Value
-	}
+// 	value := "<nil>"
+// 	if n.Value != nil {
+// 		value = *n.Value
+// 	}
 
-	if wild {
-		fmt.Printf("%s%q *%s*\n", prefix, n.Key, value)
-	} else {
-		fmt.Printf("%s%q (%s)\n", prefix, n.Key, value)
-	}
+// 	if wild {
+// 		fmt.Printf("%s%q *%s*\n", prefix, n.Key, value)
+// 	} else {
+// 		fmt.Printf("%s%q (%s)\n", prefix, n.Key, value)
+// 	}
 
-	for _, c := range n.Children {
-		print(c, prefix+indent, indent, false)
-	}
+// 	for _, c := range n.Children {
+// 		print(c, prefix+indent, indent, false)
+// 	}
 
-	print(n.Wildcard, prefix+indent, indent, true)
-}
+// 	print(n.Wildcard, prefix+indent, indent, true)
+// }
 
-func ptr[T any](value T) *T { return &value }
+// func ptr[T any](value T) *T { return &value }
 
 /*
 

@@ -2,28 +2,19 @@ package muxter
 
 import (
 	"net/http"
-	"net/url"
-	"sync"
-)
 
-var (
-	rpool = sync.Pool{
-		New: func() any { return new(http.Request) },
-	}
-	upool = sync.Pool{
-		New: func() any { return new(url.URL) },
-	}
+	"github.com/davidmdm/muxter/internal/pool"
 )
 
 func StripDepth(depth int, handler http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		r2 := rpool.Get().(*http.Request)
-		defer rpool.Put(r2)
+		r2 := pool.Requests.Get()
+		defer pool.Requests.Put(r2)
 
 		*r2 = *r
 
-		r2.URL = upool.Get().(*url.URL)
-		defer upool.Put(r2.URL)
+		r2.URL = pool.URL.Get()
+		defer pool.URL.Put(r2.URL)
 
 		*r2.URL = *r.URL
 

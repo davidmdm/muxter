@@ -8,7 +8,18 @@ import (
 const (
 	Static   = 0
 	Wildcard = 1
+	Redirect = 2
 )
+
+var redirectionNode = &Node{
+	Key: "",
+	Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Location", r.URL.Path+"/")
+		w.WriteHeader(302)
+	}),
+	Children: []*Node{},
+	Type:     Redirect,
+}
 
 type Node struct {
 	Key      string
@@ -115,10 +126,15 @@ func (node *Node) Lookup(path string, params map[string]string) (*Node, map[stri
 
 Walk:
 	for {
-		if node.IsSubdirNode() && node.Handler != nil {
+		if node.IsSubdirNode() {
 			subdirNode = node
 		}
 		if path == "" {
+			if subdirNode == nil {
+				if nn, _ := node.Lookup("/", nil); nn.Handler != nil {
+					return redirectionNode, params
+				}
+			}
 			return subdirNode, params
 		}
 		if path == node.Key && node.Type == Static {
@@ -136,16 +152,22 @@ Walk:
 		}
 
 		for _, n := range node.Children {
+			if path[0] != n.Key[0] {
+				continue
+			}
 			if path == n.Key {
 				return n, params
 			}
-			i := commonPrefixLength(path, n.Key)
-			if i == 0 {
-				continue
+			if strings.HasPrefix(path, n.Key) {
+				node, path = n, path[len(n.Key):]
+				continue Walk
 			}
 
-			node, path = n, path[i:]
-			continue Walk
+			if n.Handler != nil && strings.HasPrefix(path+"/", n.Key) {
+				return redirectionNode, nil
+			}
+
+			return subdirNode, params
 		}
 
 		if node.Wildcard != nil {
@@ -158,7 +180,7 @@ Walk:
 }
 
 func (node *Node) IsSubdirNode() bool {
-	return node != nil && strings.HasSuffix(node.Key, "/")
+	return node != nil && node.Handler != nil && strings.HasSuffix(node.Key, "/")
 }
 
 func min(a, b int) int {

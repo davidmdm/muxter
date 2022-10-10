@@ -3,10 +3,10 @@ package muxter
 import (
 	"context"
 	"net/http"
-	"path"
 	"strings"
 
-	tree "github.com/davidmdm/muxter/internal"
+	"github.com/davidmdm/muxter/internal/pool"
+	"github.com/davidmdm/muxter/internal/tree"
 )
 
 var _ http.Handler = &Mux{}
@@ -56,17 +56,15 @@ func New(options ...MuxOption) *Mux {
 
 // ServeHTTP implements the net/http Handler interface.
 func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	path := cleanPath(r.URL.Path)
-
 	params, _ := r.Context().Value(paramKey).(map[string]string)
 	shouldInjectParams := params == nil
 
 	if params == nil {
-		params = pool.Get()
-		defer pool.Put(params)
+		params = pool.Params.Get()
+		defer pool.Params.Put(params)
 	}
 
-	node, params := m.root.Lookup(path, params)
+	node, params := m.root.Lookup(r.URL.Path, params)
 
 	var handler http.Handler
 	if node == nil || node.Handler == nil {
@@ -114,29 +112,6 @@ func (m *Mux) HandleFunc(pattern string, handler http.HandlerFunc, middlewares .
 func (m *Mux) Handle(pattern string, handler http.Handler, middlewares ...Middleware) {
 	handler = WithMiddleware(handler, append(m.middlewares, middlewares...)...)
 	m.root.Insert(pattern, handler)
-}
-
-// Taken from standard library: package net/http.
-// cleanPath returns the canonical path for p, eliminating . and .. elements.
-func cleanPath(p string) string {
-	if p == "" {
-		return "/"
-	}
-	if p[0] != '/' {
-		p = "/" + p
-	}
-	np := path.Clean(p)
-	// path.Clean removes trailing slash except for root;
-	// put the trailing slash back if necessary.
-	if p[len(p)-1] == '/' && np != "/" {
-		// Fast path for common case of p being the string we want:
-		if len(p) == len(np)+1 && strings.HasPrefix(p, np) {
-			np = p
-		} else {
-			np += "/"
-		}
-	}
-	return np
 }
 
 type MethodHandler struct {

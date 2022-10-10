@@ -15,7 +15,7 @@ var redirectionNode = &Node{
 	Key: "",
 	Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Location", r.URL.Path+"/")
-		w.WriteHeader(302)
+		w.WriteHeader(301)
 	}),
 	Children: []*Node{},
 	Type:     Redirect,
@@ -121,21 +121,16 @@ func (node *Node) insert(path string, handler http.Handler) *Node {
 	return targetNode
 }
 
-func (node *Node) Lookup(path string, params map[string]string) (*Node, map[string]string) {
-	var subdirNode *Node
+func (node *Node) Lookup(path string, params map[string]string, matchTrailingSlash bool) (*Node, map[string]string) {
+	var fallback *Node
 
 Walk:
 	for {
 		if node.IsSubdirNode() {
-			subdirNode = node
+			fallback = node
 		}
 		if path == "" {
-			if subdirNode == nil {
-				if nn, _ := node.Lookup("/", nil); nn.Handler != nil {
-					return redirectionNode, params
-				}
-			}
-			return subdirNode, params
+			return fallback, params
 		}
 		if path == node.Key && node.Type == Static {
 			return node, params
@@ -160,14 +155,15 @@ Walk:
 			}
 			if strings.HasPrefix(path, n.Key) {
 				node, path = n, path[len(n.Key):]
+				if matchTrailingSlash && path == "/" && node.Handler != nil {
+					fallback = node
+				}
 				continue Walk
 			}
-
 			if n.Handler != nil && strings.HasPrefix(path+"/", n.Key) {
 				return redirectionNode, nil
 			}
-
-			return subdirNode, params
+			return fallback, params
 		}
 
 		if node.Wildcard != nil {
@@ -175,7 +171,7 @@ Walk:
 			continue Walk
 		}
 
-		return subdirNode, params
+		return fallback, params
 	}
 }
 

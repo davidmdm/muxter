@@ -19,11 +19,6 @@ var defaultMethodNotAllowedHandler http.HandlerFunc = func(w http.ResponseWriter
 	http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 }
 
-var redirectToSubdirHandler http.HandlerFunc = func(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Location", r.URL.Path+"/")
-	w.WriteHeader(http.StatusMovedPermanently)
-}
-
 // Mux is a request multiplexer with the same routing behaviour as the standard libraries net/http ServeMux
 type Mux struct {
 	root               *tree.Node
@@ -34,6 +29,8 @@ type Mux struct {
 
 type MuxOption func(*Mux)
 
+// MatchTrailingSlash will allow a fixed handler to match a route with an inbound trailing slash
+// if no rooted subtree handler is registered at that route.
 func MatchTrailingSlash(value bool) MuxOption {
 	return func(m *Mux) {
 		m.matchTrailingSlash = value
@@ -64,7 +61,7 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		defer pool.Params.Put(params)
 	}
 
-	node, params := m.root.Lookup(r.URL.Path, params)
+	node, params := m.root.Lookup(r.URL.Path, params, m.matchTrailingSlash)
 
 	var handler http.Handler
 	if node == nil || node.Handler == nil {

@@ -121,45 +121,45 @@ func TestParams(t *testing.T) {
 	}
 }
 
-// func TestSubdirRedirect(t *testing.T) {
-// 	mux := New()
-// 	mux.HandleFunc("/dir/", func(rw http.ResponseWriter, r *http.Request) {})
+func TestSubdirRedirect(t *testing.T) {
+	mux := New()
+	mux.HandleFunc("/dir/", func(rw http.ResponseWriter, r *http.Request) {})
 
-// 	rw, r := httptest.NewRecorder(), httptest.NewRequest("POST", "/dir", nil)
+	rw, r := httptest.NewRecorder(), httptest.NewRequest("POST", "/dir", nil)
 
-// 	mux.ServeHTTP(rw, r)
+	mux.ServeHTTP(rw, r)
 
-// 	if rw.Code != 301 {
-// 		t.Errorf("expected status code to be 301 but got %d", rw.Code)
-// 	}
+	if rw.Code != 301 {
+		t.Errorf("expected status code to be 301 but got %d", rw.Code)
+	}
 
-// 	if location := rw.Header().Get("Location"); location != "/dir/" {
-// 		t.Errorf("expected location to be %q but got %q", "/dir/", location)
-// 	}
-// }
+	if location := rw.Header().Get("Location"); location != "/dir/" {
+		t.Errorf("expected location to be %q but got %q", "/dir/", location)
+	}
+}
 
-// func TestMatchTrailingSlash(t *testing.T) {
-// 	regular := New()
-// 	matcher := New(MatchTrailingSlash(true))
+func TestMatchTrailingSlash(t *testing.T) {
+	regular := New()
+	matcher := New(MatchTrailingSlash(true))
 
-// 	handler := new(HandlerMock)
-// 	regular.Handle("/path", handler)
-// 	matcher.Handle("/path", handler)
+	handler := new(HandlerMock)
+	regular.Handle("/path", handler)
+	matcher.Handle("/path", handler)
 
-// 	r := httptest.NewRequest("GET", "/path/", nil)
-// 	rw := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/path/", nil)
+	rw := httptest.NewRecorder()
 
-// 	regular.ServeHTTP(rw, r)
+	regular.ServeHTTP(rw, r)
 
-// 	if calls := len(handler.ServeHTTPCalls()); calls != 0 {
-// 		t.Errorf("expected regular mux to not call handler but handler was called %d time(s)", calls)
-// 	}
+	if calls := len(handler.ServeHTTPCalls()); calls != 0 {
+		t.Errorf("expected regular mux to not call handler but handler was called %d time(s)", calls)
+	}
 
-// 	matcher.ServeHTTP(rw, r)
-// 	if calls := len(handler.ServeHTTPCalls()); calls != 1 {
-// 		t.Errorf("expected matcher mux to invoke handler once but handler was called %d time(s)", calls)
-// 	}
-// }
+	matcher.ServeHTTP(rw, r)
+	if calls := len(handler.ServeHTTPCalls()); calls != 1 {
+		t.Errorf("expected matcher mux to invoke handler once but handler was called %d time(s)", calls)
+	}
+}
 
 func TestMiddlewareCompisition(t *testing.T) {
 	var (

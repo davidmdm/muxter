@@ -36,7 +36,7 @@ func Params(r *http.Request) map[string]string {
 	// Should a user capture the map in a variable that outlives the lifetime of the handler, it
 	// would be very hard for them to understand where their params have gone. Hence return a copy
 	// of the params.
-	cpy := make(map[string]string)
+	cpy := make(map[string]string, len(params))
 	for k, v := range params {
 		cpy[k] = v
 	}

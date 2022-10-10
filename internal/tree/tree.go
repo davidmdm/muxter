@@ -121,7 +121,7 @@ func (node *Node) insert(path string, handler http.Handler) *Node {
 	return targetNode
 }
 
-func (node *Node) Lookup(path string, params map[string]string, matchTrailingSlash bool) (*Node, map[string]string) {
+func (node *Node) Lookup(path string, params map[string]string, matchTrailingSlash bool) *Node {
 	var fallback *Node
 
 Walk:
@@ -130,17 +130,17 @@ Walk:
 			fallback = node
 		}
 		if path == "" {
-			return fallback, params
+			return fallback
 		}
 		if path == node.Key && node.Type == Static {
-			return node, params
+			return node
 		}
 
 		if node.Type == Wildcard {
 			slashIdx := strings.IndexByte(path, '/')
 			if slashIdx == -1 {
 				params[node.Key] = path
-				return node, params
+				return node
 			}
 			params[node.Key] = path[:slashIdx]
 			path = path[slashIdx:]
@@ -151,7 +151,7 @@ Walk:
 				continue
 			}
 			if path == n.Key {
-				return n, params
+				return n
 			}
 			if strings.HasPrefix(path, n.Key) {
 				node, path = n, path[len(n.Key):]
@@ -161,9 +161,9 @@ Walk:
 				continue Walk
 			}
 			if n.Handler != nil && strings.HasPrefix(path+"/", n.Key) {
-				return redirectionNode, nil
+				return redirectionNode
 			}
-			return fallback, params
+			return fallback
 		}
 
 		if node.Wildcard != nil {
@@ -171,7 +171,7 @@ Walk:
 			continue Walk
 		}
 
-		return fallback, params
+		return fallback
 	}
 }
 
@@ -194,100 +194,3 @@ func commonPrefixLength(a, b string) (i int) {
 	}
 	return
 }
-
-func NewRootTree() *Node {
-	return &Node{
-		Key:      "",
-		Children: []*Node{},
-	}
-}
-
-// func main() {
-// 	root := NewRootTree()
-
-// 	root.Insert("/public/index.js", ptr("index js"))
-// 	root.Insert("/public/index.html", ptr("my index html"))
-// 	root.Insert("/context/:ctx/policy/:id", ptr("My PTR"))
-
-// 	root.Insert("/public/", ptr("root public directory"))
-
-// 	p := map[string]string{}
-
-// 	node, params := root.Lookup("/public/somefile.txt", p)
-// 	fmt.Println(node, params)
-
-// 	// fmt.Println("---------------------")
-
-// 	// root.Insert("/", ptr("root"))
-// 	// print(root, "", "  ", false)
-
-// 	// fmt.Println("---------------------")
-
-// 	// root.Insert("/api/classes", ptr("get all classes"))
-// 	// print(root, "", "  ", false)
-
-// 	// fmt.Println("---------------------")
-
-// 	// root.Insert("/api/classes/:id", ptr("copy"))
-// 	// print(root, "", "  ", false)
-
-// 	// fmt.Println("---------------------")
-
-// 	// root.Insert("/api/class", ptr("get single class"))
-// 	// print(root, "", "  ", false)
-
-// 	// fmt.Println("---------------------")
-
-// 	// root.Insert("/api/book", ptr("get a book"))
-// 	// print(root, "", "  ", false)
-
-// 	// fmt.Println("---------------------")
-
-// 	// root.Insert("/public/", ptr("public root"))
-// 	// print(root, "", "  ", false)
-
-// 	// fmt.Println("---------------------")
-
-// 	// root.Insert("/app/", ptr("app root"))
-// 	// print(root, "", "  ", false)
-
-// 	// fmt.Println("---------------------")
-
-// 	// root.Insert("jesus", ptr("what would jesus do?"))
-
-// 	// print(root, "", "  ", false)
-// }
-
-// func print(n *Node, prefix, indent string, wild bool) {
-// 	if n == nil {
-// 		return
-// 	}
-
-// 	value := "<nil>"
-// 	if n.Value != nil {
-// 		value = *n.Value
-// 	}
-
-// 	if wild {
-// 		fmt.Printf("%s%q *%s*\n", prefix, n.Key, value)
-// 	} else {
-// 		fmt.Printf("%s%q (%s)\n", prefix, n.Key, value)
-// 	}
-
-// 	for _, c := range n.Children {
-// 		print(c, prefix+indent, indent, false)
-// 	}
-
-// 	print(n.Wildcard, prefix+indent, indent, true)
-// }
-
-// func ptr[T any](value T) *T { return &value }
-
-/*
-
-/api/owner/spec/:dyn/something
-/api/owner/:oid/else
-
-input -> /api/owner/spec/else
-
-*/

@@ -61,7 +61,7 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		defer pool.Params.Put(params)
 	}
 
-	node, params := m.root.Lookup(r.URL.Path, params, m.matchTrailingSlash)
+	node := m.root.Lookup(r.URL.Path, params, m.matchTrailingSlash)
 
 	var handler http.Handler
 	if node == nil || node.Handler == nil {

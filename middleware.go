@@ -13,9 +13,9 @@ import (
 )
 
 // Middleware is a function that takes a handler and modifies its behaviour by returning a new handler
-type Middleware = func(http.Handler) http.Handler
+type Middleware = func(Handler) Handler
 
-func WithMiddleware(handler http.Handler, middlewares ...Middleware) http.Handler {
+func WithMiddleware(handler Handler, middlewares ...Middleware) Handler {
 	if handler == nil {
 		return nil
 	}
@@ -29,13 +29,13 @@ func WithMiddleware(handler http.Handler, middlewares ...Middleware) http.Handle
 // matches the provided method. If the check fails a 405 is returned. The check is case insensitive.
 func Method(method string) Middleware {
 	method = strings.ToUpper(method)
-	return func(h http.Handler) http.Handler {
-		return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+	return func(h Handler) Handler {
+		return HandlerFunc(func(w http.ResponseWriter, r *http.Request, c Context) {
 			if method != strings.ToUpper(r.Method) {
-				http.Error(rw, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+				http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 				return
 			}
-			h.ServeHTTP(rw, r)
+			h.ServeHTTPx(w, r, c)
 		})
 	}
 }
@@ -53,21 +53,21 @@ func (w *headResponseWriter) Write(b []byte) (int, error) {
 var (
 	// GET supports both GET and HEAD request methods and replaces the response writer with an writer
 	// the dumps the body if the method is HEAD, making it safe for get and head logic to be the same.
-	GET Middleware = func(h http.Handler) http.Handler {
-		return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+	GET Middleware = func(h Handler) Handler {
+		return HandlerFunc(func(w http.ResponseWriter, r *http.Request, c Context) {
 			if r.Method != "GET" {
-				HEAD(h).ServeHTTP(rw, r)
+				HEAD(h).ServeHTTPx(w, r, c)
 				return
 			}
-			h.ServeHTTP(rw, r)
+			h.ServeHTTPx(w, r, c)
 		})
 	}
 	POST   = Method("POST")
 	PATCH  = Method("PATCH")
 	PUT    = Method("PUT")
 	DELETE = Method("DELETE")
-	HEAD   = func(h http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	HEAD   = func(h Handler) Handler {
+		return HandlerFunc(func(w http.ResponseWriter, r *http.Request, c Context) {
 			if r.Method != "HEAD" {
 				http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 				return
@@ -80,22 +80,22 @@ var (
 				}
 			}()
 
-			h.ServeHTTP(headWriter, r)
+			h.ServeHTTPx(headWriter, r, c)
 		})
 	}
 )
 
 // Recover allows you to register a handler function should a panic occur in the stack.
 func Recover(recoverHandler func(recovered interface{}, rw http.ResponseWriter, r *http.Request)) Middleware {
-	return func(h http.Handler) http.Handler {
-		return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+	return func(h Handler) Handler {
+		return HandlerFunc(func(w http.ResponseWriter, r *http.Request, c Context) {
 			defer func() {
 				if recovered := recover(); r != nil {
-					recoverHandler(recovered, rw, r)
+					recoverHandler(recovered, w, r)
 					return
 				}
 			}()
-			h.ServeHTTP(rw, r)
+			h.ServeHTTPx(w, r, c)
 		})
 	}
 }
@@ -132,41 +132,41 @@ func CORS(opts AccessControlOptions) Middleware {
 	allowMethods := strings.Join(opts.AllowMethods, ", ")
 	allowHeaders := strings.Join(opts.AllowHeaders, ", ")
 
-	return func(h http.Handler) http.Handler {
-		return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+	return func(h Handler) Handler {
+		return HandlerFunc(func(w http.ResponseWriter, r *http.Request, c Context) {
 			if opts.AllowOriginFunc == nil && allowOrigin == "*" && opts.AllowCredentials {
-				rw.Header().Set("Access-Control-Allow-Origin", r.Header.Get("Origin"))
-				rw.Header().Add("Vary", "Origin")
+				w.Header().Set("Access-Control-Allow-Origin", r.Header.Get("Origin"))
+				w.Header().Add("Vary", "Origin")
 			} else if opts.AllowOriginFunc != nil {
-				rw.Header().Set("Access-Control-Allow-Origin", opts.AllowOriginFunc(r.Header.Get("Origin")))
-				rw.Header().Add("Vary", "Origin") // Let browsers know that Access-Control-Allow-Origin varies by Origin
+				w.Header().Set("Access-Control-Allow-Origin", opts.AllowOriginFunc(r.Header.Get("Origin")))
+				w.Header().Add("Vary", "Origin") // Let browsers know that Access-Control-Allow-Origin varies by Origin
 			} else {
-				rw.Header().Set("Access-Control-Allow-Origin", allowOrigin)
+				w.Header().Set("Access-Control-Allow-Origin", allowOrigin)
 			}
 
 			if opts.MaxAge > 0 {
-				rw.Header().Set("Access-Control-Max-Age", strconv.Itoa(int(opts.MaxAge.Seconds())))
+				w.Header().Set("Access-Control-Max-Age", strconv.Itoa(int(opts.MaxAge.Seconds())))
 			}
 
 			if opts.AllowCredentials {
-				rw.Header().Set("Access-Control-Allow-Credentials", "true")
+				w.Header().Set("Access-Control-Allow-Credentials", "true")
 			}
 
 			if strings.ToUpper(r.Method) == "OPTIONS" {
 				if allowHeaders != "" {
-					rw.Header().Set("Access-Control-Allow-Headers", allowHeaders)
+					w.Header().Set("Access-Control-Allow-Headers", allowHeaders)
 				} else {
-					rw.Header().Set("Access-Control-Allow-Headers", r.Header.Get("Access-Control-Request-Headers"))
-					rw.Header().Add("Vary", "Access-Control-Request-Headers")
+					w.Header().Set("Access-Control-Allow-Headers", r.Header.Get("Access-Control-Request-Headers"))
+					w.Header().Add("Vary", "Access-Control-Request-Headers")
 				}
 
-				rw.Header().Set("Access-Control-Allow-Methods", allowMethods)
+				w.Header().Set("Access-Control-Allow-Methods", allowMethods)
 
-				rw.WriteHeader(204)
+				w.WriteHeader(204)
 				return
 			}
 
-			h.ServeHTTP(rw, r)
+			h.ServeHTTPx(w, r, c)
 		})
 	}
 }
@@ -179,16 +179,16 @@ var DefaultCORS = CORS(AccessControlOptions{})
 
 // Decompress modifies the request body who's content-encoding is gzip with a gzip.ReadCloser that reads from the original
 // source body. All readers are closed safely after the main handler returns.
-var Decompress Middleware = func(h http.Handler) http.Handler {
+var Decompress Middleware = func(h Handler) Handler {
 	pool := sync.Pool{
 		New: func() interface{} {
 			return new(gzip.Reader)
 		},
 	}
 
-	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+	return HandlerFunc(func(w http.ResponseWriter, r *http.Request, c Context) {
 		if r.Header.Get("Content-Encoding") != "gzip" {
-			h.ServeHTTP(rw, r)
+			h.ServeHTTPx(w, r, c)
 			return
 		}
 
@@ -197,10 +197,10 @@ var Decompress Middleware = func(h http.Handler) http.Handler {
 
 		if err := gr.Reset(r.Body); err != nil {
 			if errors.Is(err, io.EOF) {
-				h.ServeHTTP(rw, r)
+				h.ServeHTTPx(w, r, c)
 				return
 			}
-			http.Error(rw, fmt.Sprintf("unexpected error: %v", err), 500)
+			http.Error(w, fmt.Sprintf("unexpected error: %v", err), 500)
 			return
 		}
 
@@ -212,22 +212,22 @@ var Decompress Middleware = func(h http.Handler) http.Handler {
 
 		r.Body = gr
 
-		h.ServeHTTP(rw, r)
+		h.ServeHTTPx(w, r, c)
 	})
 }
 
 // Skip decorates a middleware by giving it a predicate function for when this middleware should be skipped.
 // if the predicateFunc returns true, the middleware is skipped.
 func Skip(middleware Middleware, predicateFunc func(*http.Request) bool) Middleware {
-	return func(h http.Handler) http.Handler {
+	return func(h Handler) Handler {
 		handlerWithMiddlewareApplied := middleware(h)
 
-		return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		return HandlerFunc(func(w http.ResponseWriter, r *http.Request, c Context) {
 			if predicateFunc(r) {
-				h.ServeHTTP(rw, r)
+				h.ServeHTTPx(w, r, c)
 				return
 			}
-			handlerWithMiddlewareApplied.ServeHTTP(rw, r)
+			handlerWithMiddlewareApplied.ServeHTTPx(w, r, c)
 		})
 	}
 }

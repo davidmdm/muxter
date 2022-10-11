@@ -1,8 +1,8 @@
 package muxter
 
 import (
-	"context"
 	"net/http"
+	"path"
 	"strings"
 
 	"github.com/davidmdm/muxter/internal/pool"
@@ -11,18 +11,23 @@ import (
 
 var _ http.Handler = &Mux{}
 
-var defaultNotFoundHandler http.HandlerFunc = func(w http.ResponseWriter, r *http.Request) {
+var defaultNotFoundHandler HandlerFunc = func(w http.ResponseWriter, r *http.Request, c Context) {
 	http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 }
 
-var defaultMethodNotAllowedHandler http.HandlerFunc = func(w http.ResponseWriter, r *http.Request) {
+var defaultRedirectHandler HandlerFunc = func(w http.ResponseWriter, r *http.Request, c Context) {
+	w.Header().Set("Location", c.ogReqPath+"/")
+	w.WriteHeader(http.StatusMovedPermanently)
+}
+
+var defaultMethodNotAllowedHandler HandlerFunc = func(w http.ResponseWriter, r *http.Request, c Context) {
 	http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 }
 
 // Mux is a request multiplexer with the same routing behaviour as the standard libraries net/http ServeMux
 type Mux struct {
-	root               *tree.Node
-	notFoundHandler    http.Handler
+	root               *tree.Node[node]
+	notFoundHandler    Handler
 	middlewares        []Middleware
 	matchTrailingSlash bool
 }
@@ -37,12 +42,17 @@ func MatchTrailingSlash(value bool) MuxOption {
 	}
 }
 
+type node struct {
+	handler Handler
+	pattern string
+}
+
 // New returns a pointer to a new muxter.Mux
 func New(options ...MuxOption) *Mux {
 	m := &Mux{
-		root:               &tree.Node{},
+		root:               &tree.Node[node]{},
 		notFoundHandler:    defaultNotFoundHandler,
-		middlewares:        []func(http.Handler) http.Handler{},
+		middlewares:        []Middleware{},
 		matchTrailingSlash: false,
 	}
 	for _, apply := range options {
@@ -53,39 +63,41 @@ func New(options ...MuxOption) *Mux {
 
 // ServeHTTP implements the net/http Handler interface.
 func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	params, _ := r.Context().Value(paramKey).(map[string]string)
-	shouldInjectParams := params == nil
+	m.ServeHTTPx(w, r, Context{ogReqPath: r.URL.Path})
+}
 
-	if params == nil {
-		params = pool.Params.Get()
-		defer pool.Params.Put(params)
-	}
+func (m *Mux) ServeHTTPx(w http.ResponseWriter, r *http.Request, c Context) {
+	c.params = pool.Params.Get()
+	defer pool.Params.Put(c.params)
 
-	node := m.root.Lookup(r.URL.Path, params, m.matchTrailingSlash)
+	node := m.root.Lookup(r.URL.Path, c.params, m.matchTrailingSlash)
 
-	var handler http.Handler
-	if node == nil || node.Handler == nil {
+	var handler Handler
+	if node.Type == tree.Redirect {
+		handler = defaultRedirectHandler
+	} else if node == nil || node.Value == nil {
 		if m.notFoundHandler == nil {
 			handler = defaultNotFoundHandler
 		} else {
 			handler = m.notFoundHandler
 		}
 	} else {
-		handler = node.Handler
+		handler = node.Value.handler
+		if c.pattern != "" {
+			c.pattern = path.Clean(c.pattern + node.Value.pattern)
+		} else {
+			c.pattern = node.Value.pattern
+		}
 	}
 
-	if shouldInjectParams {
-		*r = *r.WithContext(context.WithValue(r.Context(), paramKey, params))
-	}
-
-	handler.ServeHTTP(w, r)
+	handler.ServeHTTPx(w, r, c)
 }
 
-func (m *Mux) SetNotFoundHandler(handler http.Handler) {
+func (m *Mux) SetNotFoundHandler(handler Handler) {
 	m.notFoundHandler = WithMiddleware(handler, m.middlewares...)
 }
 
-func (m *Mux) SetNotFoundHandlerFunc(handler http.HandlerFunc) {
+func (m *Mux) SetNotFoundHandlerFunc(handler HandlerFunc) {
 	m.SetNotFoundHandler(handler)
 }
 
@@ -99,29 +111,32 @@ func (m *Mux) Use(middlewares ...Middleware) {
 // HandleFunc registers a net/http HandlerFunc for a given string pattern. Middlewares are applied
 // such that the first middleware will be called before passing control to the next middleware.
 // ie mux.HandleFunc(pattern, handler, m1, m2, m3) => request flow will pass through m1 then m2 then m3.
-func (m *Mux) HandleFunc(pattern string, handler http.HandlerFunc, middlewares ...Middleware) {
+func (m *Mux) HandleFunc(pattern string, handler HandlerFunc, middlewares ...Middleware) {
 	m.Handle(pattern, handler, middlewares...)
 }
 
 // Handle registers a net/http HandlerFunc for a given string pattern. Middlewares are applied
 // such that the first middleware will be called before passing control to the next middleware.
 // ie mux.HandleFunc(pattern, handler, m1, m2, m3) => request flow will pass through m1 then m2 then m3.
-func (m *Mux) Handle(pattern string, handler http.Handler, middlewares ...Middleware) {
+func (m *Mux) Handle(pattern string, handler Handler, middlewares ...Middleware) {
 	handler = WithMiddleware(handler, append(m.middlewares, middlewares...)...)
-	m.root.Insert(pattern, handler)
+	m.root.Insert(pattern, &node{
+		handler: handler,
+		pattern: pattern,
+	})
 }
 
 type MethodHandler struct {
-	GET                     http.Handler
-	POST                    http.Handler
-	PUT                     http.Handler
-	PATCH                   http.Handler
-	HEAD                    http.Handler
-	DELETE                  http.Handler
-	MethodNotAllowedHandler http.Handler
+	GET                     Handler
+	POST                    Handler
+	PUT                     Handler
+	PATCH                   Handler
+	HEAD                    Handler
+	DELETE                  Handler
+	MethodNotAllowedHandler Handler
 }
 
-func (mh MethodHandler) getHandler(method string) (handler http.Handler) {
+func (mh MethodHandler) getHandler(method string) (handler Handler) {
 	defer func() {
 		if handler == nil {
 			if mh.MethodNotAllowedHandler == nil {
@@ -150,6 +165,6 @@ func (mh MethodHandler) getHandler(method string) (handler http.Handler) {
 	}
 }
 
-func (mh MethodHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	mh.getHandler(r.Method).ServeHTTP(w, r)
+func (mh MethodHandler) ServeHTTPx(w http.ResponseWriter, r *http.Request, c Context) {
+	mh.getHandler(r.Method).ServeHTTPx(w, r, c)
 }

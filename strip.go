@@ -6,8 +6,8 @@ import (
 	"github.com/davidmdm/muxter/internal/pool"
 )
 
-func StripDepth(depth int, handler http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func StripDepth(depth int, handler Handler) Handler {
+	return HandlerFunc(func(w http.ResponseWriter, r *http.Request, c Context) {
 		r2 := pool.Requests.Get()
 		defer pool.Requests.Put(r2)
 
@@ -20,7 +20,7 @@ func StripDepth(depth int, handler http.Handler) http.Handler {
 
 		r2.URL.Path = stripDepth(r.URL.Path, depth)
 
-		handler.ServeHTTP(w, r2)
+		handler.ServeHTTPx(w, r2, c)
 	})
 }
 

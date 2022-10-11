@@ -86,12 +86,12 @@ var (
 )
 
 // Recover allows you to register a handler function should a panic occur in the stack.
-func Recover(recoverHandler func(recovered interface{}, rw http.ResponseWriter, r *http.Request)) Middleware {
+func Recover(recoverHandler func(recovered interface{}, w http.ResponseWriter, r *http.Request, c Context)) Middleware {
 	return func(h Handler) Handler {
 		return HandlerFunc(func(w http.ResponseWriter, r *http.Request, c Context) {
 			defer func() {
 				if recovered := recover(); r != nil {
-					recoverHandler(recovered, w, r)
+					recoverHandler(recovered, w, r, c)
 					return
 				}
 			}()

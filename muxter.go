@@ -67,26 +67,32 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (m *Mux) ServeHTTPx(w http.ResponseWriter, r *http.Request, c Context) {
-	c.params = pool.Params.Get()
-	defer pool.Params.Put(c.params)
+	if c.params == nil {
+		c.params = pool.Params.Get()
+		defer pool.Params.Put(c.params)
+	}
 
 	node := m.root.Lookup(r.URL.Path, c.params, m.matchTrailingSlash)
 
 	var handler Handler
-	if node.Type == tree.Redirect {
-		handler = defaultRedirectHandler
-	} else if node == nil || node.Value == nil {
+	if node != nil {
+		if node.Type == tree.Redirect {
+			handler = defaultRedirectHandler
+		} else if node.Value != nil {
+			handler = node.Value.handler
+			if c.pattern != "" {
+				c.pattern = path.Clean(c.pattern + node.Value.pattern)
+			} else {
+				c.pattern = node.Value.pattern
+			}
+		}
+	}
+
+	if handler == nil {
 		if m.notFoundHandler == nil {
 			handler = defaultNotFoundHandler
 		} else {
 			handler = m.notFoundHandler
-		}
-	} else {
-		handler = node.Value.handler
-		if c.pattern != "" {
-			c.pattern = path.Clean(c.pattern + node.Value.pattern)
-		} else {
-			c.pattern = node.Value.pattern
 		}
 	}
 

@@ -8,73 +8,80 @@ import (
 	"sync"
 )
 
-// Ensure, that HandlerMock does implement http.Handler.
+// Ensure, that HandlerMock does implement Handler.
 // If this is not the case, regenerate this file with moq.
-var _ http.Handler = &HandlerMock{}
+var _ Handler = &HandlerMock{}
 
-// HandlerMock is a mock implementation of http.Handler.
+// HandlerMock is a mock implementation of Handler.
 //
-// 	func TestSomethingThatUsesHandler(t *testing.T) {
+//	func TestSomethingThatUsesHandler(t *testing.T) {
 //
-// 		// make and configure a mocked http.Handler
-// 		mockedHandler := &HandlerMock{
-// 			ServeHTTPFunc: func(responseWriter http.ResponseWriter, request *http.Request)  {
-// 				panic("mock out the ServeHTTP method")
-// 			},
-// 		}
+//		// make and configure a mocked Handler
+//		mockedHandler := &HandlerMock{
+//			ServeHTTPxFunc: func(w http.ResponseWriter, r *http.Request, c Context)  {
+//				panic("mock out the ServeHTTPx method")
+//			},
+//		}
 //
-// 		// use mockedHandler in code that requires http.Handler
-// 		// and then make assertions.
+//		// use mockedHandler in code that requires Handler
+//		// and then make assertions.
 //
-// 	}
+//	}
 type HandlerMock struct {
-	// ServeHTTPFunc mocks the ServeHTTP method.
-	ServeHTTPFunc func(responseWriter http.ResponseWriter, request *http.Request)
+	// ServeHTTPxFunc mocks the ServeHTTPx method.
+	ServeHTTPxFunc func(w http.ResponseWriter, r *http.Request, c Context)
 
 	// calls tracks calls to the methods.
 	calls struct {
-		// ServeHTTP holds details about calls to the ServeHTTP method.
-		ServeHTTP []struct {
-			// ResponseWriter is the responseWriter argument value.
-			ResponseWriter http.ResponseWriter
-			// Request is the request argument value.
-			Request *http.Request
+		// ServeHTTPx holds details about calls to the ServeHTTPx method.
+		ServeHTTPx []struct {
+			// W is the w argument value.
+			W http.ResponseWriter
+			// R is the r argument value.
+			R *http.Request
+			// C is the c argument value.
+			C Context
 		}
 	}
-	lockServeHTTP sync.RWMutex
+	lockServeHTTPx sync.RWMutex
 }
 
-// ServeHTTP calls ServeHTTPFunc.
-func (mock *HandlerMock) ServeHTTP(responseWriter http.ResponseWriter, request *http.Request) {
+// ServeHTTPx calls ServeHTTPxFunc.
+func (mock *HandlerMock) ServeHTTPx(w http.ResponseWriter, r *http.Request, c Context) {
 	callInfo := struct {
-		ResponseWriter http.ResponseWriter
-		Request        *http.Request
+		W http.ResponseWriter
+		R *http.Request
+		C Context
 	}{
-		ResponseWriter: responseWriter,
-		Request:        request,
+		W: w,
+		R: r,
+		C: c,
 	}
-	mock.lockServeHTTP.Lock()
-	mock.calls.ServeHTTP = append(mock.calls.ServeHTTP, callInfo)
-	mock.lockServeHTTP.Unlock()
-	if mock.ServeHTTPFunc == nil {
+	mock.lockServeHTTPx.Lock()
+	mock.calls.ServeHTTPx = append(mock.calls.ServeHTTPx, callInfo)
+	mock.lockServeHTTPx.Unlock()
+	if mock.ServeHTTPxFunc == nil {
 		return
 	}
-	mock.ServeHTTPFunc(responseWriter, request)
+	mock.ServeHTTPxFunc(w, r, c)
 }
 
-// ServeHTTPCalls gets all the calls that were made to ServeHTTP.
+// ServeHTTPxCalls gets all the calls that were made to ServeHTTPx.
 // Check the length with:
-//     len(mockedHandler.ServeHTTPCalls())
-func (mock *HandlerMock) ServeHTTPCalls() []struct {
-	ResponseWriter http.ResponseWriter
-	Request        *http.Request
+//
+//	len(mockedHandler.ServeHTTPxCalls())
+func (mock *HandlerMock) ServeHTTPxCalls() []struct {
+	W http.ResponseWriter
+	R *http.Request
+	C Context
 } {
 	var calls []struct {
-		ResponseWriter http.ResponseWriter
-		Request        *http.Request
+		W http.ResponseWriter
+		R *http.Request
+		C Context
 	}
-	mock.lockServeHTTP.RLock()
-	calls = mock.calls.ServeHTTP
-	mock.lockServeHTTP.RUnlock()
+	mock.lockServeHTTPx.RLock()
+	calls = mock.calls.ServeHTTPx
+	mock.lockServeHTTPx.RUnlock()
 	return calls
 }

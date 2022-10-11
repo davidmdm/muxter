@@ -34,7 +34,7 @@ func (c Context) MatchedPath() string {
 	return c.pattern
 }
 
-//go:generate moq -out handler_mock_test.go --stub -pkg muxter . Handler
+//go:generate moq -out handler_mock_test.go --stub . Handler
 type Handler interface {
 	ServeHTTPx(w http.ResponseWriter, r *http.Request, c Context)
 }

@@ -47,7 +47,37 @@ func (fn HandlerFunc) ServeHTTPx(w http.ResponseWriter, r *http.Request, c Conte
 
 func StdAdaptor(h http.Handler) Handler {
 	return HandlerFunc(func(w http.ResponseWriter, r *http.Request, c Context) {
-		*r = *r.WithContext(context.WithValue(r.Context(), paramKey, c.params))
+		*r = *r.WithContext(context.WithValue(r.Context(), cKey, c))
 		h.ServeHTTP(w, r)
 	})
+}
+
+type ctxKetType struct{}
+
+var cKey ctxKetType
+
+// Param reads path params from the request
+func Param(r *http.Request, key string) string {
+	if r == nil {
+		return ""
+	}
+	c, _ := r.Context().Value(cKey).(Context)
+	return c.Param(key)
+}
+
+// Params returns all path params in a map. Prefer the simple Param to avoid memory allocations.
+func Params(r *http.Request) map[string]string {
+	if r == nil {
+		return nil
+	}
+	c, _ := r.Context().Value(cKey).(Context)
+	return c.Params()
+}
+
+func MatchedPath(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	c, _ := r.Context().Value(cKey).(Context)
+	return c.MatchedPath()
 }

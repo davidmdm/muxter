@@ -1,6 +1,8 @@
 package tree
 
 import (
+	"errors"
+	"fmt"
 	"strings"
 )
 
@@ -16,6 +18,8 @@ func makeRedirectionNode[T any]() *Node[T] {
 	}
 }
 
+var errMultipleRegistrations = errors.New("multiple registrations")
+
 type Node[T any] struct {
 	Key      string
 	Value    *T
@@ -24,38 +28,51 @@ type Node[T any] struct {
 	Type     int
 }
 
-func (node *Node[T]) Insert(path string, value *T) {
-	if value == nil {
-		panic("http handler cannot be nil")
-	}
-
-	colonIndex := strings.IndexByte(path, ':')
+func (node *Node[T]) Insert(key string, value *T) error {
+	colonIndex := strings.IndexByte(key, ':')
 	if colonIndex == -1 {
-		node.insert(path, value)
-		return
+		_, err := node.insert(key, value)
+		return err
 	}
 
-	pre := path[:colonIndex]
-	node = node.insert(pre, nil)
+	pre := key[:colonIndex]
 
-	post := path[colonIndex:]
+	node, err := node.insert(pre, nil)
+	if err != nil {
+		return err
+	}
+
+	post := key[colonIndex:]
 
 	slashIdx := strings.IndexByte(post, '/')
 	if slashIdx == -1 {
-		node.insert(post, value)
-		return
+		_, err := node.insert(post, value)
+		return err
 	}
 
-	node = node.insert(post[:slashIdx], nil)
-	node.Insert(post[slashIdx:], value)
+	node, err = node.insert(post[:slashIdx], nil)
+	if err != nil {
+		return err
+	}
+
+	return node.Insert(post[slashIdx:], value)
 }
 
-func (node *Node[T]) insert(key string, value *T) *Node[T] {
-	if key == "" {
-		return node
-	}
-
+func (node *Node[T]) insert(key string, value *T) (*Node[T], error) {
 	if key[0] == ':' {
+		if node.Wildcard != nil {
+			if node.Wildcard.Key != key[1:] {
+				return nil, fmt.Errorf("mismatched wild cards :%s and %s", node.Wildcard.Key, key)
+			}
+			if value != nil {
+				if node.Wildcard.Value != nil {
+					return nil, errMultipleRegistrations
+				}
+				node.Wildcard.Value = value
+			}
+			return node.Wildcard, nil
+		}
+
 		node.Wildcard = &Node[T]{
 			Key:      key[1:],
 			Value:    value,
@@ -63,12 +80,18 @@ func (node *Node[T]) insert(key string, value *T) *Node[T] {
 			Wildcard: nil,
 			Type:     Wildcard,
 		}
-		return node.Wildcard
+		return node.Wildcard, nil
 	}
 
 	for i, n := range node.Children {
 		if key == n.Key {
-			return n
+			if value != nil {
+				if n.Value != nil {
+					return nil, errMultipleRegistrations
+				}
+				n.Value = value
+			}
+			return n, nil
 		}
 
 		cp := commonPrefixLength(n.Key, key)
@@ -88,7 +111,7 @@ func (node *Node[T]) insert(key string, value *T) *Node[T] {
 				Children: []*Node[T]{n},
 				Value:    value,
 			}
-			return node.Children[i]
+			return node.Children[i], nil
 		}
 
 		targetNode := &Node[T]{
@@ -102,7 +125,7 @@ func (node *Node[T]) insert(key string, value *T) *Node[T] {
 			Children: []*Node[T]{n, targetNode},
 		}
 
-		return targetNode
+		return targetNode, nil
 	}
 
 	targetNode := &Node[T]{
@@ -113,7 +136,7 @@ func (node *Node[T]) insert(key string, value *T) *Node[T] {
 
 	node.Children = append(node.Children, targetNode)
 
-	return targetNode
+	return targetNode, nil
 }
 
 func (node *Node[T]) Lookup(path string, params map[string]string, matchTrailingSlash bool) *Node[T] {

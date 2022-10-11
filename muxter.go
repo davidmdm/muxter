@@ -1,8 +1,8 @@
 package muxter
 
 import (
+	"fmt"
 	"net/http"
-	"path"
 	"strings"
 
 	"github.com/davidmdm/muxter/internal/pool"
@@ -76,15 +76,15 @@ func (m *Mux) ServeHTTPx(w http.ResponseWriter, r *http.Request, c Context) {
 
 	var handler Handler
 	if node != nil {
-		if node.Type == tree.Redirect {
-			handler = defaultRedirectHandler
-		} else if node.Value != nil {
+		if node.Value != nil {
 			handler = node.Value.handler
 			if c.pattern != "" {
-				c.pattern = path.Clean(c.pattern + node.Value.pattern)
+				c.pattern = c.pattern + node.Value.pattern[1:]
 			} else {
 				c.pattern = node.Value.pattern
 			}
+		} else if node.Type == tree.Redirect {
+			handler = defaultRedirectHandler
 		}
 	}
 
@@ -125,11 +125,20 @@ func (m *Mux) HandleFunc(pattern string, handler HandlerFunc, middlewares ...Mid
 // such that the first middleware will be called before passing control to the next middleware.
 // ie mux.HandleFunc(pattern, handler, m1, m2, m3) => request flow will pass through m1 then m2 then m3.
 func (m *Mux) Handle(pattern string, handler Handler, middlewares ...Middleware) {
+	if pattern == "" {
+		panic("muxter: cannot register empty route pattern")
+	}
+	if pattern[0] != '/' {
+		panic("muxter: route pattern must begin with a forward-slash: '/' but got: " + pattern)
+	}
+	if handler == nil {
+		panic("muxter: handler cannot be nil")
+	}
+
 	handler = WithMiddleware(handler, append(m.middlewares, middlewares...)...)
-	m.root.Insert(pattern, &node{
-		handler: handler,
-		pattern: pattern,
-	})
+	if err := m.root.Insert(pattern, &node{handler: handler, pattern: pattern}); err != nil {
+		panic(fmt.Sprintf("muxter: failed to register route %s - %v", pattern, err))
+	}
 }
 
 type MethodHandler struct {

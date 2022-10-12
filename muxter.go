@@ -141,6 +141,10 @@ func (m *Mux) Handle(pattern string, handler Handler, middlewares ...Middleware)
 	}
 }
 
+func (m *Mux) StdHandle(pattern string, handler http.Handler, middlewares ...Middleware) {
+	m.Handle(pattern, StdAdaptor(handler))
+}
+
 type MethodHandler struct {
 	GET                     Handler
 	POST                    Handler

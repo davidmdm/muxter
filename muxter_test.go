@@ -139,26 +139,51 @@ func TestSubdirRedirect(t *testing.T) {
 }
 
 func TestMatchTrailingSlash(t *testing.T) {
-	regular := New()
-	matcher := New(MatchTrailingSlash(true))
+	t.Run("no params", func(t *testing.T) {
+		regular := New()
+		matcher := New(MatchTrailingSlash(true))
 
-	handler := new(HandlerMock)
-	regular.Handle("/path", handler)
-	matcher.Handle("/path", handler)
+		handler := new(HandlerMock)
+		regular.Handle("/path", handler)
+		matcher.Handle("/path", handler)
 
-	r := httptest.NewRequest("GET", "/path/", nil)
-	w := httptest.NewRecorder()
+		r := httptest.NewRequest("GET", "/path/", nil)
+		w := httptest.NewRecorder()
 
-	regular.ServeHTTP(w, r)
+		regular.ServeHTTP(w, r)
 
-	if calls := len(handler.ServeHTTPxCalls()); calls != 0 {
-		t.Errorf("expected regular mux to not call handler but handler was called %d time(s)", calls)
-	}
+		if calls := len(handler.ServeHTTPxCalls()); calls != 0 {
+			t.Errorf("expected regular mux to not call handler but handler was called %d time(s)", calls)
+		}
 
-	matcher.ServeHTTP(w, r)
-	if calls := len(handler.ServeHTTPxCalls()); calls != 1 {
-		t.Errorf("expected matcher mux to invoke handler once but handler was called %d time(s)", calls)
-	}
+		matcher.ServeHTTP(w, r)
+		if calls := len(handler.ServeHTTPxCalls()); calls != 1 {
+			t.Errorf("expected matcher mux to invoke handler once but handler was called %d time(s)", calls)
+		}
+	})
+
+	t.Run("with params", func(t *testing.T) {
+		regular := New()
+		matcher := New(MatchTrailingSlash(true))
+
+		handler := new(HandlerMock)
+		regular.Handle("/path/:id", handler)
+		matcher.Handle("/path/:id", handler)
+
+		r := httptest.NewRequest("GET", "/path/value/", nil)
+		w := httptest.NewRecorder()
+
+		regular.ServeHTTP(w, r)
+
+		if calls := len(handler.ServeHTTPxCalls()); calls != 0 {
+			t.Errorf("expected regular mux to not call handler but handler was called %d time(s)", calls)
+		}
+
+		matcher.ServeHTTP(w, r)
+		if calls := len(handler.ServeHTTPxCalls()); calls != 1 {
+			t.Errorf("expected matcher mux to invoke handler once but handler was called %d time(s)", calls)
+		}
+	})
 }
 
 func TestMiddlewareCompisition(t *testing.T) {

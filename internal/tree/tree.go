@@ -173,15 +173,16 @@ Walk:
 			}
 			if strings.HasPrefix(path, n.Key) {
 				node, path = n, path[len(n.Key):]
-				if matchTrailingSlash && path == "/" && node.Value != nil {
-					fallback = node
-				}
 				continue Walk
 			}
 			if n.Value != nil && strings.HasPrefix(path+"/", n.Key) {
 				return makeRedirectionNode[T]()
 			}
 			return fallback
+		}
+
+		if matchTrailingSlash && path == "/" && node.Value != nil {
+			fallback = node
 		}
 
 		if node.Wildcard != nil {

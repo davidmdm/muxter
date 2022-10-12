@@ -147,9 +147,6 @@ Walk:
 		if node.IsSubdirNode() {
 			fallback = node
 		}
-		if path == "" {
-			return fallback
-		}
 		if path == node.Key && node.Type == Static {
 			return node
 		}
@@ -158,7 +155,11 @@ Walk:
 			slashIdx := strings.IndexByte(path, '/')
 			if slashIdx == -1 {
 				params[node.Key] = path
-				return node
+				if node.Value != nil {
+					return node
+				} else {
+					return fallback
+				}
 			}
 			params[node.Key] = path[:slashIdx]
 			path = path[slashIdx:]

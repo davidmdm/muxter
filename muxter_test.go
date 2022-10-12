@@ -75,6 +75,24 @@ func TestRouting(t *testing.T) {
 	}
 }
 
+func TestSubdirHandlerOnParam(t *testing.T) {
+	m := New()
+
+	handler := new(HandlerMock)
+
+	m.Handle("/api/", handler)
+	m.HandleFunc("/api/context/:ctx/resource/:id", func(w http.ResponseWriter, r *http.Request, c Context) {})
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/api/context/conf", nil)
+
+	m.ServeHTTP(w, r)
+
+	if actual := len(handler.ServeHTTPxCalls()); actual != 1 {
+		t.Errorf("expected handler to be called once but was called %d time(s)", actual)
+	}
+}
+
 func TestParams(t *testing.T) {
 	mux := New()
 

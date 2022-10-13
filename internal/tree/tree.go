@@ -139,51 +139,49 @@ func (node *Node[T]) insert(key string, value *T) (*Node[T], error) {
 	return targetNode, nil
 }
 
-func (node *Node[T]) Lookup(path string, params map[string]string, matchTrailingSlash bool) *Node[T] {
+func (node *Node[T]) Lookup(path string, params map[string]string, matchTrailingSlash bool) (target *Node[T]) {
 	var fallback *Node[T]
+	defer func() {
+		if target == nil || (target.Value == nil && target.Type != Redirect) {
+			target = fallback
+		}
+	}()
 
 Walk:
 	for {
-		if node.IsSubdirNode() {
-			fallback = node
-		}
-		if path == node.Key && node.Type == Static {
-			return node
-		}
-
 		if node.Type == Wildcard {
-			slashIdx := strings.IndexByte(path, '/')
-			if slashIdx == -1 {
+			if idx := strings.IndexByte(path, '/'); idx == -1 {
 				params[node.Key] = path
-				if node.Value != nil {
-					return node
-				} else {
-					return fallback
+				return node
+			} else {
+				params[node.Key] = path[:idx]
+				path = path[idx:]
+			}
+		} else {
+			if !strings.HasPrefix(path, node.Key) {
+				if node.Value != nil && path+"/" == node.Key {
+					return &Node[T]{Type: Redirect}
 				}
+				return nil
 			}
-			params[node.Key] = path[:slashIdx]
-			path = path[slashIdx:]
-		}
-
-		for _, n := range node.Children {
-			if path[0] != n.Key[0] {
-				continue
+			path = strings.TrimPrefix(path, node.Key)
+			if path == "" {
+				return node
 			}
-			if path == n.Key {
-				return n
+			if node.IsSubdirNode() {
+				fallback = node
 			}
-			if strings.HasPrefix(path, n.Key) {
-				node, path = n, path[len(n.Key):]
-				continue Walk
-			}
-			if n.Value != nil && strings.HasPrefix(path+"/", n.Key) {
-				return makeRedirectionNode[T]()
-			}
-			return fallback
 		}
 
 		if matchTrailingSlash && path == "/" && node.Value != nil {
 			fallback = node
+		}
+
+		for _, c := range node.Children {
+			if c.Key[0] == path[0] {
+				node = c
+				continue Walk
+			}
 		}
 
 		if node.Wildcard != nil {
@@ -191,7 +189,7 @@ Walk:
 			continue Walk
 		}
 
-		return fallback
+		return nil
 	}
 }
 

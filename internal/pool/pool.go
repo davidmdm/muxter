@@ -25,7 +25,7 @@ func (p ParamPool) Put(params map[string]string) {
 }
 
 var Params = ParamPool{
-	pool: &sync.Pool{New: func() interface{} { return make(map[string]string) }},
+	pool: &sync.Pool{New: func() interface{} { return make(map[string]string, 12) }},
 }
 
 type RequestPool struct {

@@ -7,6 +7,13 @@ import (
 	"testing"
 )
 
+func TestBanana(t *testing.T) {
+	m := New()
+
+	m.HandleFunc("/api/v1", func(w http.ResponseWriter, r *http.Request, c Context) {})
+	m.HandleFunc("/api/v", func(w http.ResponseWriter, r *http.Request, c Context) {})
+}
+
 func TestRouting(t *testing.T) {
 	mux := New()
 

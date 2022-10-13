@@ -12,18 +12,13 @@ const (
 	Redirect = 2
 )
 
-func makeRedirectionNode[T any]() *Node[T] {
-	return &Node[T]{
-		Type: Redirect,
-	}
-}
-
 var errMultipleRegistrations = errors.New("multiple registrations")
 
 type Node[T any] struct {
 	Key      string
 	Value    *T
 	Children []*Node[T]
+	Indices  []byte
 	Wildcard *Node[T]
 	Type     int
 }
@@ -109,6 +104,7 @@ func (node *Node[T]) insert(key string, value *T) (*Node[T], error) {
 			node.Children[i] = &Node[T]{
 				Key:      key,
 				Children: []*Node[T]{n},
+				Indices:  []byte{n.Key[0]},
 				Value:    value,
 			}
 			return node.Children[i], nil
@@ -123,6 +119,7 @@ func (node *Node[T]) insert(key string, value *T) (*Node[T], error) {
 		node.Children[i] = &Node[T]{
 			Key:      key[:cp],
 			Children: []*Node[T]{n, targetNode},
+			Indices:  []byte{n.Key[0], targetNode.Key[0]},
 		}
 
 		return targetNode, nil
@@ -135,6 +132,7 @@ func (node *Node[T]) insert(key string, value *T) (*Node[T], error) {
 	}
 
 	node.Children = append(node.Children, targetNode)
+	node.Indices = append(node.Indices, targetNode.Key[0])
 
 	return targetNode, nil
 }
@@ -177,9 +175,10 @@ Walk:
 			fallback = node
 		}
 
-		for _, c := range node.Children {
-			if c.Key[0] == path[0] {
-				node = c
+		targetIndice := path[0]
+		for i, c := range node.Indices {
+			if c == targetIndice {
+				node = node.Children[i]
 				continue Walk
 			}
 		}

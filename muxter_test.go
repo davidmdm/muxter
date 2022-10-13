@@ -1,17 +1,131 @@
 package muxter
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 )
 
-func TestBanana(t *testing.T) {
+func TestRoutingx(t *testing.T) {
 	m := New()
 
 	m.HandleFunc("/api/v1", func(w http.ResponseWriter, r *http.Request, c Context) {})
 	m.HandleFunc("/api/v", func(w http.ResponseWriter, r *http.Request, c Context) {})
+
+	testcases := []struct {
+		Name               string
+		Routes             []string
+		Matches            map[string]Context
+		MatchTrailingSlash bool
+	}{
+		{
+			Name:   "distinct routes",
+			Routes: []string{"/api", "/app", "/app/"},
+			Matches: map[string]Context{
+				"/api": {
+					ogReqPath: "/api",
+					pattern:   "/api",
+					params:    map[string]string{},
+				},
+				"/app": {
+					ogReqPath: "/app",
+					pattern:   "/app",
+					params:    map[string]string{},
+				},
+				"/app/": {
+					ogReqPath: "/app/",
+					pattern:   "/app/",
+					params:    map[string]string{},
+				},
+				"/app/index": {
+					ogReqPath: "/app/index",
+					pattern:   "/app/",
+					params:    map[string]string{},
+				},
+				"/public": {
+					ogReqPath: "/public",
+					pattern:   "",
+					params:    map[string]string{},
+				},
+			},
+		},
+		{
+			Name: "with params",
+			Routes: []string{
+				"/api/:api",
+				"/api/:api/ctx/:ctx",
+				"/api/root",
+				"/api/:api/",
+			},
+			Matches: map[string]Context{
+				"/api/root": {
+					ogReqPath: "/api/root",
+					pattern:   "/api/root",
+					params:    map[string]string{},
+				},
+				"/api/svc": {
+					ogReqPath: "/api/svc",
+					pattern:   "/api/:api",
+					params:    map[string]string{"api": "svc"},
+				},
+				"/api/svc/": {
+					ogReqPath: "/api/svc/",
+					pattern:   "/api/:api/",
+					params:    map[string]string{"api": "svc"},
+				},
+				"/api/svc/users": {
+					ogReqPath: "/api/svc/users",
+					pattern:   "/api/:api/",
+					params:    map[string]string{"api": "svc"},
+				},
+				"/api/svc/ctx/mine": {
+					ogReqPath: "/api/svc/ctx/mine",
+					pattern:   "/api/:api/ctx/:ctx",
+					params:    map[string]string{"api": "svc", "ctx": "mine"},
+				},
+				"/api/svc/ctx/mine/": {
+					ogReqPath: "/api/svc/ctx/mine/",
+					pattern:   "/api/:api/",
+					params:    map[string]string{"api": "svc", "ctx": "mine"},
+				},
+			},
+			MatchTrailingSlash: false,
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.Name, func(t *testing.T) {
+			m := New(MatchTrailingSlash(tc.MatchTrailingSlash))
+			h := new(HandlerMock)
+			for _, r := range tc.Routes {
+				m.Handle(r, h)
+			}
+			m.SetNotFoundHandler(h)
+			t.Run(fmt.Sprintf("match trailing slash %v", tc.MatchTrailingSlash), func(t *testing.T) {
+				for r, c := range tc.Matches {
+					t.Run(r, func(t *testing.T) {
+						*h = HandlerMock{
+							ServeHTTPxFunc: func(w http.ResponseWriter, r *http.Request, ctx Context) {
+								if !reflect.DeepEqual(c, ctx) {
+									t.Errorf("expected context to be equal to %v but got %v", c, ctx)
+								}
+							},
+						}
+						w := httptest.NewRecorder()
+						r := httptest.NewRequest("GET", r, nil)
+						m.ServeHTTP(w, r)
+
+						if calls := len(h.ServeHTTPxCalls()); calls != 1 {
+							t.Fatalf("expected handler to be called once but was called %d time(s)", calls)
+						}
+					})
+				}
+			})
+		})
+	}
 }
 
 func TestRouting(t *testing.T) {

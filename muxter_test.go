@@ -94,6 +94,31 @@ func TestRoutingx(t *testing.T) {
 			},
 			MatchTrailingSlash: false,
 		},
+		{
+			Name: "wildcard to static segment relationship",
+			Routes: []string{
+				"/api/:seg",
+				"/api/static",
+			},
+			Matches: map[string]Context{
+				"/api/wild": {
+					ogReqPath: "/api/wild",
+					pattern:   "/api/:seg",
+					params:    map[string]string{"seg": "wild"},
+				},
+				"/api/static": {
+					ogReqPath: "/api/static",
+					pattern:   "/api/static",
+					params:    map[string]string{},
+				},
+				"/api/stat": {
+					ogReqPath: "/api/stat",
+					pattern:   "/api/:seg",
+					params:    map[string]string{"seg": "stat"},
+				},
+			},
+			MatchTrailingSlash: false,
+		},
 	}
 
 	for _, tc := range testcases {

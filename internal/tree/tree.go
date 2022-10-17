@@ -145,6 +145,8 @@ func (node *Node[T]) Lookup(path string, params map[string]string, matchTrailing
 		}
 	}()
 
+	var wildcardbackup *Node[T]
+
 Walk:
 	for {
 		if node.Type == Wildcard {
@@ -157,6 +159,10 @@ Walk:
 			}
 		} else {
 			if !strings.HasPrefix(path, node.Key) {
+				if wildcardbackup != nil {
+					node = wildcardbackup
+					continue Walk
+				}
 				if node.Value != nil && path+"/" == node.Key {
 					return &Node[T]{Type: Redirect}
 				}
@@ -174,6 +180,8 @@ Walk:
 		if matchTrailingSlash && path == "/" && node.Value != nil {
 			fallback = node
 		}
+
+		wildcardbackup = node.Wildcard
 
 		targetIndice := path[0]
 		for i, c := range node.Indices {

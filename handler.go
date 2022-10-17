@@ -45,9 +45,11 @@ func (fn HandlerFunc) ServeHTTPx(w http.ResponseWriter, r *http.Request, c Conte
 	fn(w, r, c)
 }
 
-func StdAdaptor(h http.Handler) Handler {
+func StdAdaptor(h http.Handler, withReqContext bool) Handler {
 	return HandlerFunc(func(w http.ResponseWriter, r *http.Request, c Context) {
-		*r = *r.WithContext(context.WithValue(r.Context(), cKey, c))
+		if withReqContext {
+			*r = *r.WithContext(context.WithValue(r.Context(), cKey, c))
+		}
 		h.ServeHTTP(w, r)
 	})
 }

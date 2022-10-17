@@ -7,9 +7,10 @@ import (
 )
 
 const (
-	Static   = 0
-	Wildcard = 1
-	Redirect = 2
+	Static = iota
+	Wildcard
+	Catchall
+	Redirect
 )
 
 var errMultipleRegistrations = errors.New("multiple registrations")
@@ -20,29 +21,34 @@ type Node[T any] struct {
 	Children []*Node[T]
 	Indices  []byte
 	Wildcard *Node[T]
+	Catchall *Node[T]
 	Type     int
 }
 
 func (node *Node[T]) Insert(key string, value *T) error {
-	colonIndex := strings.IndexByte(key, ':')
-	if colonIndex == -1 {
+	idx := strings.IndexAny(key, ":*")
+	if idx == -1 {
 		_, err := node.insert(key, value)
 		return err
 	}
 
-	pre := key[:colonIndex]
+	pre := key[:idx]
 
 	node, err := node.insert(pre, nil)
 	if err != nil {
 		return err
 	}
 
-	post := key[colonIndex:]
+	post := key[idx:]
 
 	slashIdx := strings.IndexByte(post, '/')
 	if slashIdx == -1 {
 		_, err := node.insert(post, value)
 		return err
+	}
+
+	if post[0] == '*' {
+		return fmt.Errorf("cannot register segments after a catchall expression %q", post[:slashIdx])
 	}
 
 	node, err = node.insert(post[:slashIdx], nil)
@@ -54,7 +60,8 @@ func (node *Node[T]) Insert(key string, value *T) error {
 }
 
 func (node *Node[T]) insert(key string, value *T) (*Node[T], error) {
-	if key[0] == ':' {
+	switch key[0] {
+	case ':':
 		if node.Wildcard != nil {
 			if node.Wildcard.Key != key[1:] {
 				return nil, fmt.Errorf("mismatched wild cards :%s and %s", node.Wildcard.Key, key)
@@ -69,13 +76,24 @@ func (node *Node[T]) insert(key string, value *T) (*Node[T], error) {
 		}
 
 		node.Wildcard = &Node[T]{
-			Key:      key[1:],
-			Value:    value,
-			Children: []*Node[T]{},
-			Wildcard: nil,
-			Type:     Wildcard,
+			Key:   key[1:],
+			Value: value,
+			Type:  Wildcard,
 		}
 		return node.Wildcard, nil
+	case '*':
+		if node.Catchall != nil {
+			if node.Catchall.Key != key[1:] {
+				return nil, fmt.Errorf("mismatched wild cards *%s and %s", node.Catchall.Key, key)
+			}
+			return nil, errMultipleRegistrations
+		}
+		node.Catchall = &Node[T]{
+			Key:   key[1:],
+			Value: value,
+			Type:  Catchall,
+		}
+		return node.Catchall, nil
 	}
 
 	for i, n := range node.Children {
@@ -149,15 +167,8 @@ func (node *Node[T]) Lookup(path string, params map[string]string, matchTrailing
 
 Walk:
 	for {
-		if node.Type == Wildcard {
-			if idx := strings.IndexByte(path, '/'); idx == -1 {
-				params[node.Key] = path
-				return node
-			} else {
-				params[node.Key] = path[:idx]
-				path = path[idx:]
-			}
-		} else {
+		switch node.Type {
+		case Static:
 			if !strings.HasPrefix(path, node.Key) {
 				if wildcardbackup != nil {
 					node = wildcardbackup
@@ -175,6 +186,17 @@ Walk:
 			if node.IsSubdirNode() {
 				fallback = node
 			}
+		case Wildcard:
+			if idx := strings.IndexByte(path, '/'); idx == -1 {
+				params[node.Key] = path
+				return node
+			} else {
+				params[node.Key] = path[:idx]
+				path = path[idx:]
+			}
+		case Catchall:
+			params[node.Key] = path
+			return node
 		}
 
 		if matchTrailingSlash && path == "/" && node.Value != nil {
@@ -189,6 +211,11 @@ Walk:
 				node = node.Children[i]
 				continue Walk
 			}
+		}
+
+		if node.Catchall != nil {
+			node = node.Catchall
+			continue Walk
 		}
 
 		if node.Wildcard != nil {

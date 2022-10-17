@@ -92,7 +92,6 @@ func TestRoutingx(t *testing.T) {
 					params:    map[string]string{"api": "svc", "ctx": "mine"},
 				},
 			},
-			MatchTrailingSlash: false,
 		},
 		{
 			Name: "wildcard to static segment relationship",
@@ -117,7 +116,26 @@ func TestRoutingx(t *testing.T) {
 					params:    map[string]string{"seg": "stat"},
 				},
 			},
-			MatchTrailingSlash: false,
+		},
+		{
+			Name: "wildcard to catchall segment relationship",
+			Routes: []string{
+				"/api/:seg",
+				"/api/:seg/*catchall",
+				"/api/:seg/:segtwo",
+			},
+			Matches: map[string]Context{
+				"/api/wild": {
+					ogReqPath: "/api/wild",
+					pattern:   "/api/:seg",
+					params:    map[string]string{"seg": "wild"},
+				},
+				"/api/test/catch/all": {
+					ogReqPath: "/api/test/catch/all",
+					pattern:   "/api/:seg/*catchall",
+					params:    map[string]string{"seg": "test", "catchall": "catch/all"},
+				},
+			},
 		},
 	}
 

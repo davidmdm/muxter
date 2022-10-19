@@ -231,3 +231,45 @@ func Skip(middleware Middleware, predicateFunc func(*http.Request) bool) Middlew
 		})
 	}
 }
+
+type RespOverview struct {
+	Code        int
+	Method      string
+	Pattern     string
+	TimeElapsed time.Duration
+}
+
+type responseProxy struct {
+	http.ResponseWriter
+	code int
+}
+
+func (r *responseProxy) WriteHeader(code int) {
+	r.code = code
+	r.ResponseWriter.WriteHeader(code)
+}
+
+func (r responseProxy) Code() int {
+	if r.code == 0 {
+		return 200
+	}
+	return r.code
+}
+
+func Logger(dst io.Writer, fn func(overview RespOverview) string) Middleware {
+	return func(h Handler) Handler {
+		return HandlerFunc(func(w http.ResponseWriter, r *http.Request, c Context) {
+			proxy := responseProxy{w, 0}
+			start := time.Now()
+
+			h.ServeHTTPx(&proxy, r, c)
+
+			fmt.Fprintln(dst, fn(RespOverview{
+				Code:        proxy.Code(),
+				Method:      r.Method,
+				Pattern:     c.pattern,
+				TimeElapsed: time.Since(start),
+			}))
+		})
+	}
+}

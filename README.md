@@ -30,16 +30,44 @@ or have many options or be framework-y in anyway.
 Maybe provide some highly desired middlewares in the future... Maybe.
 But that's it. Don't murder me. Maybe.
 
-###
-
 ### Caveats
 
 Are there differences with the standard library?
 
 Small ones.
 
-- It does not parse or handle hosts/ports.
+- muxter.HandlerFunc signature has a muxter.Context as a third parameter, similiar to httprouter's param argument.
+- It does not parse or handle hosts/ports like that standard library.
 - mux.Handle accepts variadic middlewares.
+
+### Why diverge from http.Handler / http.HandlerFunc signature?
+
+In the first versions of muxter the router simply registered http.Handlers and put params and pattern matching within the (\*http.Request).Context, however this operation necessarily must allocate a new request and context, and although performance would remain comparable to the standard library, it could in no way compete with other high-performance routers.
+
+This is why most routers have their own signature (echo, gin, httprouter, and so on). By extending the Handler Signature you avoid storing values within the request's context, and avoid unnecessary allocations.
+
+With muxter, I wanted to stay as close to the standard library as possible and absorb the \*http.Request and http.ResponseWriter values into a single object like some other libraries have done. Therefore the muxter HandlerFunc signature is simply:
+
+```go
+type HandlerFunc func (w http.ResponseWriter, r *http.Request, c muxter.Context)
+```
+
+Where context allows you to get any matched Params, and the matched route pattern.
+
+Standard http.Handlers can be adapted to be used with Muxter using either the Adapter or StandardHandle APIs at the cost of injecting context into the request and allocating:
+
+```go
+var handler http.Handler
+
+mux.Handle("/", muxter.Adaptor(handler))
+mux.StandardHandle("/", handler)
+```
+
+The main difference between these APIs is that with the Adaptor API you can opt out of injecting the context, saving the allocation.
+
+```go
+mux.Handle("/", muxter.Adaptor(handler, muxter.NoContext))
+```
 
 ## Examples
 
@@ -62,44 +90,51 @@ func main() {
 	// (Registered handlers before a call to muxter.Use are not affected but handlers registered after are)
 	mux.Use(
 		// Add auth middleware
-		func(h http.Handler) http.Handler {
-			return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		func(h muxter.Handler) muxter.Handler {
+			return muxter.HandlerFunc(func(w http.ResponseWriter, r *http.Request, c muxter.Context) {
 				if r.Header.Get("Authorization") != os.Getenv("API_KEY") {
-					http.Error(rw, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+					http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 					return
 				}
-				h.ServeHTTP(rw, r)
+				h.ServeHTTP(w, r)
 			})
 		},
-		// Add logger middleware
-		func(h http.Handler) http.Handler {
-			return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-				fmt.Println(r.Method, r.URL.Path)
-				h.ServeHTTP(rw, r)
-			})
-		},
+		// ... continue adding middlewares variadically
 	)
 
-	mux.HandleFunc("/", func(rw http.ResponseWriter, r *http.Request) {
-		io.WriteString(rw, "hello world!")
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request, c muxter.Context) {
+		io.WriteString(w, "hello world!")
 	})
 
 	// muxter matches path params
-	mux.HandleFunc("/resource/:id", func(rw http.ResponseWriter, r *http.Request) {
-		id := muxter.Param(r, "id")
-		io.WriteString(rw, id)
+	mux.HandleFunc("/resource/:id", func(w http.ResponseWriter, r *http.Request, c muxter.Context) {
+		id := c.Param(r, "id")
+		io.WriteString(w, id)
+	})
+
+	// muxter matches catchalls
+	mux.HandleFunc("/resource/*name", func(w http.ResponseWriter, r *http.Request, c muxter.Context) {
+		name := c.Param(r, "name")
+		io.WriteString(w, id)
+	})
+
+	// muxter matches pattern params
+	mux.HandleFunc("/resource/:id", func(w http.ResponseWriter, r *http.Request, c muxter.Context) {
+		fmt.Println("pattern:", c.MatchedPath())
+		id := c.Param(r, "id")
+		io.WriteString(w, id)
 	})
 
 	// muxter accepts middlewares and provides basic ones for Method matching.
 	mux.HandleFunc(
 		"/resource",
-		func(rw http.ResponseWriter, r *http.Request) {
-			io.WriteString(rw, "hello world!")
+		func(w http.ResponseWriter, r *http.Request, c muxter.Context) {
+			io.WriteString(w, "hello world!")
 		},
 		muxter.POST, // Returns 405 if method is not POST
 	)
 
-	// Muxes can be composed since a mux is simple a http.Handler
+	// Muxes can be composed since a mux is simple a muxter.Handler
 	mux.Handle("/api/v1/", GetAPIV1Mux(), V1AuthMiddleware)
 	mux.Handle("/api/v2/", GetAPIV2Mux(), V2AuthMiddleware)
 
@@ -107,23 +142,23 @@ func main() {
 	mux.Handle(
 		"/resource/:id",
 		muxter.MethodHandler{
-			GET: http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+			GET: muxter.HandlerFunc(func(w http.ResponseWriter, r *http.Request, c muxter.Context) {
 				// get resource
 			}),
-			PUT: http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+			PUT: muxter.HandlerFunc(func(w http.ResponseWriter, r *http.Request, c muxter.Context) {
 				// put resource
 			}),
-			DELETE: http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+			DELETE: muxter.HandlerFunc(func(w http.ResponseWriter, r *http.Request, c muxter.Context) {
 				// delete resource
 			}),
-			MethodNotAllowedHandler: http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+			MethodNotAllowedHandler: muxter.HandlerFunc(func(w http.ResponseWriter, r *http.Request, c muxter.Context) {
 				// custom method not allowed handler
  			})
 		},
 	)
 
 	// Add a custom not found handler.
-	mux.NotFoundHandler = func(rw http.ResponseWriter, r *http.Request) {
+	mux.NotFoundHandler = func(w http.ResponseWriter, r *http.Request, c muxter.Context) {
 		// custom not found logic
 	}
 
@@ -154,7 +189,7 @@ Muxter provides middlewares for guarding routes for specific Request Methods
 
 A middleware from recovering from panics:
 
-- muxter.Recover(handler func(recovered interface{}, rw http.ResponseWriter, r \*http.Request))
+- muxter.Recover(handler func(recovered interface{}, w http.ResponseWriter, r \*http.Request))
 
 a middleware for enabling CORS
 

@@ -141,8 +141,8 @@ func (m *Mux) Handle(pattern string, handler Handler, middlewares ...Middleware)
 	}
 }
 
-func (m *Mux) StdHandle(pattern string, handler http.Handler, withReqContext bool, middlewares ...Middleware) {
-	m.Handle(pattern, StdAdaptor(handler, withReqContext))
+func (m *Mux) StandardHandle(pattern string, handler http.Handler, middlewares ...Middleware) {
+	m.Handle(pattern, Adaptor(handler))
 }
 
 type MethodHandler struct {

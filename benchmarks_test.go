@@ -39,7 +39,7 @@ func BenchmarkRouting(b *testing.B) {
 func BenchmarkStdRouting(b *testing.B) {
 	mux := New()
 
-	mux.StdHandle("/some/deeply/nested/path/id", http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {}), false)
+	mux.StandardHandle("/some/deeply/nested/path/id", http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {}))
 
 	rw := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/some/deeply/nested/path/id", nil)

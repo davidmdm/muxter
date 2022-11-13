@@ -9,7 +9,7 @@ import (
 func TestStdAdaptor(t *testing.T) {
 	mux := New()
 
-	mux.StdHandle(
+	mux.StandardHandle(
 		"/country/:country/city/:city",
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			p := Params(r)
@@ -32,7 +32,6 @@ func TestStdAdaptor(t *testing.T) {
 				t.Errorf("expected matched path to be %q but got %q", expected, actual)
 			}
 		}),
-		true,
 	)
 
 	w := httptest.NewRecorder()

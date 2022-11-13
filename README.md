@@ -4,6 +4,8 @@
 
 Muxter is a HTTP request multiplexer.
 
+The main inspiration behind muxter is httprouter by julienschmidt but with an API and routing strategy that more closely resembles the standard library.
+
 ## Why muxter?
 
 The go community generally likes to keep dependencies to a minimum. I do too.
@@ -27,6 +29,8 @@ or have many options or be framework-y in anyway.
 
 Maybe provide some highly desired middlewares in the future... Maybe.
 But that's it. Don't murder me. Maybe.
+
+###
 
 ### Caveats
 

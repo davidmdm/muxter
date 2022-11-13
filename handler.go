@@ -45,9 +45,24 @@ func (fn HandlerFunc) ServeHTTPx(w http.ResponseWriter, r *http.Request, c Conte
 	fn(w, r, c)
 }
 
-func StdAdaptor(h http.Handler, withReqContext bool) Handler {
+type adaptorOptions struct {
+	noContext bool
+}
+
+type AdaptorOption func(*adaptorOptions)
+
+var NoContext AdaptorOption = func(ao *adaptorOptions) {
+	ao.noContext = true
+}
+
+func Adaptor(h http.Handler, opts ...AdaptorOption) Handler {
+	var options adaptorOptions
+	for _, apply := range opts {
+		apply(&options)
+	}
+
 	return HandlerFunc(func(w http.ResponseWriter, r *http.Request, c Context) {
-		if withReqContext {
+		if !options.noContext {
 			*r = *r.WithContext(context.WithValue(r.Context(), cKey, c))
 		}
 		h.ServeHTTP(w, r)

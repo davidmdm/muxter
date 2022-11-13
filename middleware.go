@@ -233,9 +233,10 @@ func Skip(middleware Middleware, predicateFunc func(*http.Request) bool) Middlew
 }
 
 type RespOverview struct {
-	Code        int
-	Method      string
+	Request     *http.Request
+	Response    http.ResponseWriter
 	Pattern     string
+	Code        int
 	TimeElapsed time.Duration
 }
 
@@ -265,9 +266,10 @@ func Logger(dst io.Writer, fn func(overview RespOverview) string) Middleware {
 			h.ServeHTTPx(&proxy, r, c)
 
 			fmt.Fprintln(dst, fn(RespOverview{
-				Code:        proxy.Code(),
-				Method:      r.Method,
+				Request:     r,
+				Response:    w,
 				Pattern:     c.pattern,
+				Code:        proxy.Code(),
 				TimeElapsed: time.Since(start),
 			}))
 		})

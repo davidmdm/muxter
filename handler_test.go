@@ -28,7 +28,7 @@ func TestStdAdaptor(t *testing.T) {
 			}
 
 			expected = "/country/:country/city/:city"
-			if actual := MatchedPath(r); actual != expected {
+			if actual := Pattern(r); actual != expected {
 				t.Errorf("expected matched path to be %q but got %q", expected, actual)
 			}
 		}),

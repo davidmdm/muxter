@@ -120,7 +120,7 @@ func main() {
 
 	// muxter matches pattern params
 	mux.HandleFunc("/resource/:id", func(w http.ResponseWriter, r *http.Request, c muxter.Context) {
-		fmt.Println("pattern:", c.MatchedPath())
+		fmt.Println("pattern:", c.Pattern())
 		id := c.Param(r, "id")
 		io.WriteString(w, id)
 	})

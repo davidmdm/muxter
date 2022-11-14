@@ -46,7 +46,7 @@ In the first versions of muxter the router simply registered http.Handlers and p
 
 This is why most routers have their own signature (echo, gin, httprouter, and so on). By extending the Handler Signature you avoid storing values within the request's context, and avoid unnecessary allocations.
 
-With muxter, I wanted to stay as close to the standard library as possible and absorb the \*http.Request and http.ResponseWriter values into a single object like some other libraries have done. Therefore the muxter HandlerFunc signature is simply:
+With muxter, I wanted to stay as close to the standard library as possible and not absorb the \*http.Request and http.ResponseWriter values into a single object like some other libraries have done. Therefore the muxter HandlerFunc signature is simply:
 
 ```go
 type HandlerFunc func (w http.ResponseWriter, r *http.Request, c muxter.Context)

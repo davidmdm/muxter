@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/davidmdm/muxter/internal/pool"
-	"github.com/davidmdm/muxter/internal/tree"
 )
 
 var _ http.Handler = &Mux{}
@@ -26,7 +25,7 @@ var defaultMethodNotAllowedHandler HandlerFunc = func(w http.ResponseWriter, r *
 
 // Mux is a request multiplexer with the same routing behaviour as the standard libraries net/http ServeMux
 type Mux struct {
-	root               *tree.Node[node]
+	root               *node
 	notFoundHandler    Handler
 	middlewares        []Middleware
 	matchTrailingSlash bool
@@ -42,15 +41,10 @@ func MatchTrailingSlash(value bool) MuxOption {
 	}
 }
 
-type node struct {
-	handler Handler
-	pattern string
-}
-
 // New returns a pointer to a new muxter.Mux
 func New(options ...MuxOption) *Mux {
 	m := &Mux{
-		root:               &tree.Node[node]{},
+		root:               &node{},
 		notFoundHandler:    defaultNotFoundHandler,
 		middlewares:        []Middleware{},
 		matchTrailingSlash: false,
@@ -72,27 +66,21 @@ func (m *Mux) ServeHTTPx(w http.ResponseWriter, r *http.Request, c Context) {
 		defer pool.Params.Put(c.params)
 	}
 
-	node := m.root.Lookup(r.URL.Path, c.params, m.matchTrailingSlash)
+	value := m.root.Lookup(r.URL.Path, c.params, m.matchTrailingSlash)
 
 	var handler Handler
-	if node != nil {
-		if node.Value != nil {
-			handler = node.Value.handler
-			if c.pattern != "" {
-				c.pattern = c.pattern + node.Value.pattern[1:]
-			} else {
-				c.pattern = node.Value.pattern
-			}
-		} else if node.Type == tree.Redirect {
-			handler = defaultRedirectHandler
-		}
-	}
-
-	if handler == nil {
-		if m.notFoundHandler == nil {
-			handler = defaultNotFoundHandler
+	if value != nil {
+		handler = value.handler
+		if c.pattern != "" {
+			c.pattern = c.pattern + value.pattern[1:]
 		} else {
+			c.pattern = value.pattern
+		}
+	} else {
+		if m.notFoundHandler != nil {
 			handler = m.notFoundHandler
+		} else {
+			handler = defaultNotFoundHandler
 		}
 	}
 
@@ -136,7 +124,7 @@ func (m *Mux) Handle(pattern string, handler Handler, middlewares ...Middleware)
 	}
 
 	handler = WithMiddleware(handler, append(m.middlewares, middlewares...)...)
-	if err := m.root.Insert(pattern, &node{handler: handler, pattern: pattern}); err != nil {
+	if err := m.root.Insert(pattern, &value{handler: handler, pattern: pattern}); err != nil {
 		panic(fmt.Sprintf("muxter: failed to register route %s - %v", pattern, err))
 	}
 }

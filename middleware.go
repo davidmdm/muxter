@@ -45,6 +45,12 @@ type headResponseWriter struct {
 	contentLength int
 }
 
+func (w headResponseWriter) Flush() {
+	if f, ok := w.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
 func (w *headResponseWriter) Write(b []byte) (int, error) {
 	w.contentLength += len(b)
 	return len(b), nil
@@ -243,6 +249,12 @@ type RespOverview struct {
 type responseProxy struct {
 	http.ResponseWriter
 	code int
+}
+
+func (w responseProxy) Flush() {
+	if f, ok := w.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
 }
 
 func (r *responseProxy) WriteHeader(code int) {

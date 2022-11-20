@@ -4,6 +4,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/gin-gonic/gin"
+	"github.com/julienschmidt/httprouter"
+	"github.com/labstack/echo/v4"
 )
 
 func BenchmarkSTD(b *testing.B) {
@@ -82,20 +86,51 @@ func BenchmarkRoutingParams(b *testing.B) {
 	}
 }
 
-// func BenchmarkRoutingParamsHttpRouter(b *testing.B) {
-// 	mux := httprouter.New()
+func BenchmarkRoutingParamsHttpRouter(b *testing.B) {
+	mux := httprouter.New()
 
-// 	mux.GET("/some/deeply/:nested/path/:id", func(w http.ResponseWriter, r *http.Request, p httprouter.Params) {})
+	mux.GET("/some/deeply/:nested/path/:id", func(w http.ResponseWriter, r *http.Request, p httprouter.Params) {})
 
-// 	rw := httptest.NewRecorder()
-// 	r := httptest.NewRequest("GET", "/some/deeply/nested/path/id", nil)
+	rw := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/some/deeply/nested/path/id", nil)
 
-// 	b.ResetTimer()
+	b.ResetTimer()
 
-// 	for i := 0; i < b.N; i++ {
-// 		mux.ServeHTTP(rw, r)
-// 	}
-// }
+	for i := 0; i < b.N; i++ {
+		mux.ServeHTTP(rw, r)
+	}
+}
+
+func BenchmarkRoutingParamsGin(b *testing.B) {
+	gin.SetMode(gin.ReleaseMode)
+	mux := gin.New()
+
+	mux.GET("/some/deeply/:nested/path/:id", func(ctx *gin.Context) {})
+
+	rw := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/some/deeply/nested/path/id", nil)
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		mux.ServeHTTP(rw, r)
+	}
+}
+
+func BenchmarkRoutingParamsEcho(b *testing.B) {
+	mux := echo.New()
+
+	mux.GET("/some/deeply/:nested/path/:id", func(c echo.Context) error { return nil })
+
+	rw := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/some/deeply/nested/path/id", nil)
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		mux.ServeHTTP(rw, r)
+	}
+}
 
 func BenchmarkRoutingParamsNestedMuxes(b *testing.B) {
 	child := New()

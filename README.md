@@ -4,7 +4,7 @@
 
 Muxter is a HTTP request multiplexer.
 
-The main inspiration behind muxter is httprouter by julienschmidt but with an API and routing strategy that more closely resembles the standard library.
+The main inspiration behind muxter is `httprouter` by julienschmidt but with an API and routing strategy that more closely resembles the standard library.
 
 ## Why muxter?
 
@@ -25,12 +25,9 @@ So why muxter?
 - It supports middleware.
 
 And most importantly it does not seek to do or become anything more,
-or have many options or be framework-y in anyway.
+or become a framework. It is simply a routing library with some common middlewares.
 
-Maybe provide some highly desired middlewares in the future... Maybe.
-But that's it. Don't murder me. Maybe.
-
-### Caveats
+### Caveats / Differences with the standard library
 
 Are there differences with the standard library?
 
@@ -67,6 +64,65 @@ The main difference between these APIs is that with the Adaptor API you can opt 
 
 ```go
 mux.Handle("/", muxter.Adaptor(handler, muxter.NoContext))
+```
+
+### Differences from httprouter and other common frameworks
+
+Muxter routes in the same way that the standard library's http.ServeMux does. The concept of rooted subtrees is carried over, and longest path matching still holds.
+
+Another big difference from `httprouter` (muxter's main source of inspiration other than that standard library) and other common frameworks like `gin` is that you can register static and wildcard segments for similar paths and the static route shall be preferred, for example:
+
+```go
+mux := muxter.New()
+
+mux.HandleFunc("/user/:id", HandleUserID)
+mux.HandleFunc("/user/me", HandleMe)
+```
+
+Although the first route will match a request with incoming path `/user/me`, the second handler will be chosen as muxter prefers to walk static segments over doing wildcard matching. One must keep in mind that muxter follows static segments and does not try wildcards if it does not find a handler. Consider the following example:
+
+```go
+mux := muxter.New()
+
+mux.HandleFunc("/user/:id", HandleUserID)
+mux.HandleFunc("/user/:id/posts", HandleUserPosts)
+mux.HandleFunc("/user/me", HandleMe)
+```
+
+A request with path `/user/me/posts` will result in a 404 because paths that start with `/user/me` will match against `/user/me` over `/user/:id`.
+
+### Performance
+
+Simple micro-benchmarks show muxter to be similar in routing performance as other more mainstream routers like `httprouter`, `echo` and `gin`.
+
+For a simple benchmark that tests routing routing performance for paths with two wildcards gives these results:
+
+`muxter benchmark code`
+
+```go
+func BenchmarkRoutingParams(b *testing.B) {
+	mux := muxter.New()
+
+	mux.HandleFunc("/some/deeply/:nested/path/:id", func(rw http.ResponseWriter, r *http.Request, c Context) {})
+
+	rw := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/some/deeply/nested/path/id", nil)
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		mux.ServeHTTP(rw, r)
+	}
+}
+```
+
+(similar tests with muxter swapped out are included in the benchmarks branch)
+
+```
+BenchmarkRoutingParams-16                       17666200                58.05 ns/op
+BenchmarkRoutingParamsHttpRouter-16             11968552                88.83 ns/op
+BenchmarkRoutingParamsGin-16                    19787914                53.35 ns/op
+BenchmarkRoutingParamsEcho-16                   15198240                70.38 ns/op
 ```
 
 ## Examples
@@ -186,6 +242,10 @@ Muxter provides middlewares for guarding routes for specific Request Methods
 - muxter.PATCH
 - muxter.HEAD
 - muxter.Method(method string)
+
+A simple logging middleware:
+
+- muxter.Logger(w io.Writer, fn func(overview muxter.RespOverview) string)
 
 A middleware from recovering from panics:
 

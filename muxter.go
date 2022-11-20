@@ -57,15 +57,15 @@ func New(options ...MuxOption) *Mux {
 
 // ServeHTTP implements the net/http Handler interface.
 func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	m.ServeHTTPx(w, r, Context{ogReqPath: r.URL.Path})
+	c := Context{
+		ogReqPath: r.URL.Path,
+		params:    pool.Params.Get(),
+	}
+	m.ServeHTTPx(w, r, c)
+	pool.Params.Put(c.params)
 }
 
 func (m *Mux) ServeHTTPx(w http.ResponseWriter, r *http.Request, c Context) {
-	if c.params == nil {
-		c.params = pool.Params.Get()
-		defer pool.Params.Put(c.params)
-	}
-
 	value := m.root.Lookup(r.URL.Path, c.params, m.matchTrailingSlash)
 
 	var handler Handler

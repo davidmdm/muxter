@@ -4,28 +4,32 @@ import (
 	"net/http"
 	"net/url"
 	"sync"
+
+	"github.com/davidmdm/muxter/internal"
 )
 
 type ParamPool struct {
 	pool *sync.Pool
 }
 
-func (p ParamPool) Get() map[string]string {
-	return p.pool.Get().(map[string]string)
+func (p ParamPool) Get() *[]internal.Param {
+	params := p.pool.Get().(*[]internal.Param)
+	*params = (*params)[:0]
+	return params
 }
 
-func (p ParamPool) Put(params map[string]string) {
+func (p ParamPool) Put(params *[]internal.Param) {
 	if params == nil {
 		return
-	}
-	for k := range params {
-		delete(params, k)
 	}
 	p.pool.Put(params)
 }
 
 var Params = ParamPool{
-	pool: &sync.Pool{New: func() interface{} { return make(map[string]string, 12) }},
+	pool: &sync.Pool{New: func() interface{} {
+		p := make([]internal.Param, 12)
+		return &p
+	}},
 }
 
 type RequestPool struct {

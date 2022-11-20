@@ -3,33 +3,37 @@ package muxter
 import (
 	"context"
 	"net/http"
+
+	"github.com/davidmdm/muxter/internal"
 )
 
 type Context struct {
 	ogReqPath string
 	pattern   string
-	params    map[string]string
+	params    *[]internal.Param
 }
 
 // Param returns the param value for the key. If no param exists for the key the empty string is returned.
 func (c Context) Param(key string) string {
-	if c.params == nil {
-		return ""
+	for _, p := range *c.params {
+		if p.Key == key {
+			return p.Value
+		}
 	}
-	return c.params[key]
+	return ""
 }
 
 // Params returns a copy of the param map
 func (c Context) Params() map[string]string {
 	if c.params == nil {
-		return nil
+		return map[string]string{}
 	}
-	cpy := make(map[string]string, len(c.params))
-	for k, v := range c.params {
-		cpy[k] = v
+	paramMap := make(map[string]string, len(*c.params))
+	for _, param := range *c.params {
+		paramMap[param.Key] = param.Value
 	}
 
-	return cpy
+	return paramMap
 }
 
 // Pattern returns the registered route pattern that was matched.

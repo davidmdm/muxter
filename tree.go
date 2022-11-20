@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/davidmdm/muxter/internal"
 )
 
 const (
@@ -161,7 +163,7 @@ func (n *node) insert(key string, value *value) (*node, error) {
 
 var redirectValue = &value{handler: defaultRedirectHandler}
 
-func (n *node) Lookup(path string, params map[string]string, matchTrailingSlash bool) (result *value) {
+func (n *node) Lookup(path string, params *[]internal.Param, matchTrailingSlash bool) (result *value) {
 	var fallback *value
 	defer func() {
 		if result == nil {
@@ -194,14 +196,23 @@ Walk:
 			}
 		case wildcard:
 			if idx := strings.IndexByte(path, '/'); idx == -1 {
-				params[n.Key] = path
+				*params = append(*params, internal.Param{
+					Key:   n.Key,
+					Value: path,
+				})
 				return n.Value
 			} else {
-				params[n.Key] = path[:idx]
+				*params = append(*params, internal.Param{
+					Key:   n.Key,
+					Value: path[:idx],
+				})
 				path = path[idx:]
 			}
 		case catchall:
-			params[n.Key] = path
+			*params = append(*params, internal.Param{
+				Key:   n.Key,
+				Value: path,
+			})
 			return n.Value
 		}
 

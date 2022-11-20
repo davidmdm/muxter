@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"reflect"
 	"testing"
+
+	"github.com/davidmdm/muxter/internal"
 )
 
 func TestRoutingx(t *testing.T) {
@@ -28,27 +30,27 @@ func TestRoutingx(t *testing.T) {
 				"/api": {
 					ogReqPath: "/api",
 					pattern:   "/api",
-					params:    map[string]string{},
+					params:    Ptr([]internal.Param{}),
 				},
 				"/app": {
 					ogReqPath: "/app",
 					pattern:   "/app",
-					params:    map[string]string{},
+					params:    Ptr([]internal.Param{}),
 				},
 				"/app/": {
 					ogReqPath: "/app/",
 					pattern:   "/app/",
-					params:    map[string]string{},
+					params:    Ptr([]internal.Param{}),
 				},
 				"/app/index": {
 					ogReqPath: "/app/index",
 					pattern:   "/app/",
-					params:    map[string]string{},
+					params:    Ptr([]internal.Param{}),
 				},
 				"/public": {
 					ogReqPath: "/public",
 					pattern:   "",
-					params:    map[string]string{},
+					params:    Ptr([]internal.Param{}),
 				},
 			},
 		},
@@ -64,32 +66,32 @@ func TestRoutingx(t *testing.T) {
 				"/api/root": {
 					ogReqPath: "/api/root",
 					pattern:   "/api/root",
-					params:    map[string]string{},
+					params:    Ptr([]internal.Param{}),
 				},
 				"/api/svc": {
 					ogReqPath: "/api/svc",
 					pattern:   "/api/:api",
-					params:    map[string]string{"api": "svc"},
+					params:    Ptr([]internal.Param{{Key: "api", Value: "svc"}}),
 				},
 				"/api/svc/": {
 					ogReqPath: "/api/svc/",
 					pattern:   "/api/:api/",
-					params:    map[string]string{"api": "svc"},
+					params:    Ptr([]internal.Param{{Key: "api", Value: "svc"}}),
 				},
 				"/api/svc/users": {
 					ogReqPath: "/api/svc/users",
 					pattern:   "/api/:api/",
-					params:    map[string]string{"api": "svc"},
+					params:    Ptr([]internal.Param{{Key: "api", Value: "svc"}}),
 				},
 				"/api/svc/ctx/mine": {
 					ogReqPath: "/api/svc/ctx/mine",
 					pattern:   "/api/:api/ctx/:ctx",
-					params:    map[string]string{"api": "svc", "ctx": "mine"},
+					params:    Ptr([]internal.Param{{Key: "api", Value: "svc"}, {Key: "ctx", Value: "mine"}}),
 				},
 				"/api/svc/ctx/mine/": {
 					ogReqPath: "/api/svc/ctx/mine/",
 					pattern:   "/api/:api/",
-					params:    map[string]string{"api": "svc", "ctx": "mine"},
+					params:    Ptr([]internal.Param{{Key: "api", Value: "svc"}, {Key: "ctx", Value: "mine"}}),
 				},
 			},
 		},
@@ -103,17 +105,17 @@ func TestRoutingx(t *testing.T) {
 				"/api/wild": {
 					ogReqPath: "/api/wild",
 					pattern:   "/api/:seg",
-					params:    map[string]string{"seg": "wild"},
+					params:    Ptr([]internal.Param{{Key: "seg", Value: "wild"}}),
 				},
 				"/api/static": {
 					ogReqPath: "/api/static",
 					pattern:   "/api/static",
-					params:    map[string]string{},
+					params:    Ptr([]internal.Param{}),
 				},
 				"/api/stat": {
 					ogReqPath: "/api/stat",
 					pattern:   "/api/:seg",
-					params:    map[string]string{"seg": "stat"},
+					params:    Ptr([]internal.Param{{Key: "seg", Value: "stat"}}),
 				},
 			},
 		},
@@ -128,12 +130,15 @@ func TestRoutingx(t *testing.T) {
 				"/api/wild": {
 					ogReqPath: "/api/wild",
 					pattern:   "/api/:seg",
-					params:    map[string]string{"seg": "wild"},
+					params:    Ptr([]internal.Param{{Key: "seg", Value: "wild"}}),
 				},
 				"/api/test/catch/all": {
 					ogReqPath: "/api/test/catch/all",
 					pattern:   "/api/:seg/*catchall",
-					params:    map[string]string{"seg": "test", "catchall": "catch/all"},
+					params: Ptr([]internal.Param{
+						{Key: "seg", Value: "test"},
+						{Key: "catchall", Value: "catch/all"},
+					}),
 				},
 			},
 		},
@@ -152,6 +157,27 @@ func TestRoutingx(t *testing.T) {
 					t.Run(r, func(t *testing.T) {
 						*h = HandlerMock{
 							ServeHTTPxFunc: func(w http.ResponseWriter, r *http.Request, ctx Context) {
+								if c.ogReqPath != ctx.ogReqPath {
+									t.Fatalf("expected ctx path to be %q but got %q", c.ogReqPath, ctx.ogReqPath)
+								}
+								if c.pattern != ctx.pattern {
+									t.Fatalf("expected ctx pattern to be %q but got %q", c.pattern, ctx.pattern)
+								}
+
+								expectedParams := *c.params
+								actualParams := *ctx.params
+
+								if len(expectedParams) != len(actualParams) {
+									t.Fatalf("expected params to have length %d but got %d", len(expectedParams), len(actualParams))
+								}
+								for i := range expectedParams {
+									expected := expectedParams[i]
+									actual := actualParams[i]
+									if !reflect.DeepEqual(expected, actual) {
+										t.Fatalf("expected param %+v but got %+v", expected, actual)
+									}
+								}
+
 								if !reflect.DeepEqual(c, ctx) {
 									t.Errorf("expected context to be equal to %v but got %v", c, ctx)
 								}
@@ -586,4 +612,8 @@ func TestNestedMuxes(t *testing.T) {
 	if code := w.Code; code != 200 {
 		t.Errorf("expected code 200 but got %d", code)
 	}
+}
+
+func Ptr[T any](value T) *T {
+	return &value
 }

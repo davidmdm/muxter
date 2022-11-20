@@ -82,6 +82,21 @@ func BenchmarkRoutingParams(b *testing.B) {
 	}
 }
 
+// func BenchmarkRoutingParamsHttpRouter(b *testing.B) {
+// 	mux := httprouter.New()
+
+// 	mux.GET("/some/deeply/:nested/path/:id", func(w http.ResponseWriter, r *http.Request, p httprouter.Params) {})
+
+// 	rw := httptest.NewRecorder()
+// 	r := httptest.NewRequest("GET", "/some/deeply/nested/path/id", nil)
+
+// 	b.ResetTimer()
+
+// 	for i := 0; i < b.N; i++ {
+// 		mux.ServeHTTP(rw, r)
+// 	}
+// }
+
 func BenchmarkRoutingParamsNestedMuxes(b *testing.B) {
 	child := New()
 	child.HandleFunc("/path/:id", func(w http.ResponseWriter, r *http.Request, c Context) {})

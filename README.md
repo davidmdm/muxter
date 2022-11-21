@@ -100,7 +100,7 @@ For a simple benchmark that tests routing routing performance for paths with two
 `muxter benchmark code`
 
 ```go
-func BenchmarkRoutingParams(b *testing.B) {
+func BenchmarkRoutingParamsMuxter(b *testing.B) {
 	mux := muxter.New()
 
 	mux.HandleFunc("/some/deeply/:nested/path/:id", func(rw http.ResponseWriter, r *http.Request, c Context) {})
@@ -119,10 +119,10 @@ func BenchmarkRoutingParams(b *testing.B) {
 (similar tests with muxter swapped out are included in the benchmarks branch)
 
 ```
-BenchmarkRoutingParams-16                       17666200                58.05 ns/op
-BenchmarkRoutingParamsHttpRouter-16             11968552                88.83 ns/op
-BenchmarkRoutingParamsGin-16                    19787914                53.35 ns/op
-BenchmarkRoutingParamsEcho-16                   15198240                70.38 ns/op
+BenchmarkRoutingParamsMuxter-16                 24841117                46.91 ns/op
+BenchmarkRoutingParamsHttpRouter-16             11504378                87.89 ns/op
+BenchmarkRoutingParamsGin-16                    20096968                54.21 ns/op
+BenchmarkRoutingParamsEcho-16                   15106918                68.29 ns/op
 ```
 
 ## Examples

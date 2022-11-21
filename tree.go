@@ -187,7 +187,7 @@ Walk:
 				}
 				return nil
 			}
-			path = strings.TrimPrefix(path, n.Key)
+			path = path[len(n.Key):]
 			if path == "" {
 				return n.Value
 			}

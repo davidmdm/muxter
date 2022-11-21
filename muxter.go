@@ -28,7 +28,7 @@ type Mux struct {
 	root               *node
 	notFoundHandler    Handler
 	middlewares        []Middleware
-	matchTrailingSlash bool
+	matchTrailingSlash *bool
 }
 
 type MuxOption func(*Mux)
@@ -37,7 +37,7 @@ type MuxOption func(*Mux)
 // if no rooted subtree handler is registered at that route.
 func MatchTrailingSlash(value bool) MuxOption {
 	return func(m *Mux) {
-		m.matchTrailingSlash = value
+		m.matchTrailingSlash = &value
 	}
 }
 
@@ -45,9 +45,9 @@ func MatchTrailingSlash(value bool) MuxOption {
 func New(options ...MuxOption) *Mux {
 	m := &Mux{
 		root:               &node{},
-		notFoundHandler:    defaultNotFoundHandler,
 		middlewares:        []Middleware{},
-		matchTrailingSlash: false,
+		notFoundHandler:    nil,
+		matchTrailingSlash: nil,
 	}
 	for _, apply := range options {
 		apply(m)
@@ -66,7 +66,7 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (m *Mux) ServeHTTPx(w http.ResponseWriter, r *http.Request, c Context) {
-	value := m.root.Lookup(r.URL.Path, c.params, m.matchTrailingSlash)
+	value := m.root.Lookup(r.URL.Path, c.params, m.matchTrailingSlash != nil && *m.matchTrailingSlash)
 
 	var handler Handler
 	if value != nil {
@@ -121,6 +121,17 @@ func (m *Mux) Handle(pattern string, handler Handler, middlewares ...Middleware)
 	}
 	if handler == nil {
 		panic("muxter: handler cannot be nil")
+	}
+
+	if mh, ok := handler.(*Mux); ok {
+		cpy := *mh
+		if cpy.notFoundHandler == nil {
+			cpy.notFoundHandler = m.notFoundHandler
+		}
+		if cpy.matchTrailingSlash == nil {
+			cpy.matchTrailingSlash = m.matchTrailingSlash
+		}
+		handler = &cpy
 	}
 
 	handler = WithMiddleware(handler, append(m.middlewares, middlewares...)...)

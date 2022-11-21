@@ -587,31 +587,103 @@ func TestMethodHandler(t *testing.T) {
 }
 
 func TestNestedMuxes(t *testing.T) {
-	child := New()
-	child.HandleFunc("/path/:id", func(w http.ResponseWriter, r *http.Request, c Context) {
-		p := c.Params()
-		if len(p) != 2 {
-			t.Errorf("expected 2 params but got: %d", len(p))
-		}
-		if id := c.Param("id"); id != "id" {
-			t.Errorf("expected id param to equal id but got: %s", id)
-		}
-		if nested := c.Param("nested"); nested != "nested" {
-			t.Errorf("expected nested param to equal nested but got: %s", nested)
+	t.Run("routing with params", func(t *testing.T) {
+		child := New()
+		child.HandleFunc("/path/:id", func(w http.ResponseWriter, r *http.Request, c Context) {
+			p := c.Params()
+			if len(p) != 2 {
+				t.Errorf("expected 2 params but got: %d", len(p))
+			}
+			if id := c.Param("id"); id != "id" {
+				t.Errorf("expected id param to equal id but got: %s", id)
+			}
+			if nested := c.Param("nested"); nested != "nested" {
+				t.Errorf("expected nested param to equal nested but got: %s", nested)
+			}
+		})
+
+		root := New()
+		root.Handle("/some/deeply/:nested/", StripDepth(3, child))
+
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest("GET", "/some/deeply/nested/path/id", nil)
+
+		root.ServeHTTP(w, r)
+
+		if code := w.Code; code != 200 {
+			t.Errorf("expected code 200 but got %d", code)
 		}
 	})
 
-	root := New()
-	root.Handle("/some/deeply/:nested/", StripDepth(3, child))
+	t.Run("nested muxs get registered with parent options if not set", func(t *testing.T) {
+		apiHandler := new(HandlerMock)
 
-	w := httptest.NewRecorder()
-	r := httptest.NewRequest("GET", "/some/deeply/nested/path/id", nil)
+		child := New()
+		child.Handle("/api", apiHandler)
 
-	root.ServeHTTP(w, r)
+		parent := New(MatchTrailingSlash(true))
 
-	if code := w.Code; code != 200 {
-		t.Errorf("expected code 200 but got %d", code)
-	}
+		notFoundHandler := new(HandlerMock)
+
+		parent.SetNotFoundHandler(notFoundHandler)
+
+		parent.Handle("/", child)
+
+		r := httptest.NewRequest("GET", "/api/value", nil)
+		w := httptest.NewRecorder()
+
+		parent.ServeHTTP(w, r)
+
+		if calls := len(notFoundHandler.calls.ServeHTTPx); calls != 1 {
+			t.Fatalf("expected not found handler to be called %d time(s) but got %d", 1, calls)
+		}
+
+		r = httptest.NewRequest("GET", "/api/", nil)
+
+		parent.ServeHTTP(w, r)
+		if calls := len(apiHandler.calls.ServeHTTPx); calls != 1 {
+			t.Fatalf("expected not found handler to be called %d time(s) but got %d", 1, calls)
+		}
+	})
+
+	t.Run("nested muxs use locally defined options over parents", func(t *testing.T) {
+		child := New(MatchTrailingSlash(false))
+
+		childNotFoundHandler := new(HandlerMock)
+		child.SetNotFoundHandler(childNotFoundHandler)
+
+		apiHandler := new(HandlerMock)
+		child.Handle("/api", apiHandler)
+
+		parent := New(MatchTrailingSlash(true))
+
+		parentNotFoundHandler := new(HandlerMock)
+		parent.SetNotFoundHandler(parentNotFoundHandler)
+
+		parent.Handle("/", child)
+
+		r := httptest.NewRequest("GET", "/api/value", nil)
+		w := httptest.NewRecorder()
+
+		parent.ServeHTTP(w, r)
+
+		if calls := len(parentNotFoundHandler.calls.ServeHTTPx); calls != 0 {
+			t.Fatalf("expected not found handler to be called %d time(s) but got %d", 0, calls)
+		}
+		if calls := len(childNotFoundHandler.calls.ServeHTTPx); calls != 1 {
+			t.Fatalf("expected not found handler to be called %d time(s) but got %d", 1, calls)
+		}
+
+		r = httptest.NewRequest("GET", "/api/", nil)
+
+		parent.ServeHTTP(w, r)
+		if calls := len(apiHandler.calls.ServeHTTPx); calls != 0 {
+			t.Fatalf("expected not found handler to be called %d time(s) but got %d", 0, calls)
+		}
+		if calls := len(childNotFoundHandler.calls.ServeHTTPx); calls != 2 {
+			t.Fatalf("expected not found handler to be called %d time(s) but got %d", 2, calls)
+		}
+	})
 }
 
 func Ptr[T any](value T) *T {

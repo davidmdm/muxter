@@ -90,7 +90,7 @@ func (m *Mux) ServeHTTPx(w http.ResponseWriter, r *http.Request, c Context) {
 }
 
 func (m *Mux) SetNotFoundHandler(handler Handler) {
-	m.notFoundHandler = WithMiddleware(handler, m.middlewares...)
+	m.notFoundHandler = handler
 }
 
 func (m *Mux) SetNotFoundHandlerFunc(handler HandlerFunc) {
@@ -98,7 +98,7 @@ func (m *Mux) SetNotFoundHandlerFunc(handler HandlerFunc) {
 }
 
 func (m *Mux) SetMethodNotAllowedHandler(handler Handler) {
-	m.methodNotAllowedHandler = WithMiddleware(handler, m.middlewares...)
+	m.methodNotAllowedHandler = handler
 }
 
 func (m *Mux) SetMethodNotAllowedHandlerFunc(handler HandlerFunc) {

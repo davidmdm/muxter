@@ -44,23 +44,50 @@ func TestRecoverMiddleware(t *testing.T) {
 }
 
 func TestMethodMiddleware(t *testing.T) {
-	mux := New()
-	handler := new(HandlerMock)
+	t.Run("GET", func(t *testing.T) {
+		mux := New()
+		handler := new(HandlerMock)
 
-	mux.Handle("/", handler, Method("GET"))
+		mux.Handle("/", handler, mux.GET())
 
-	w := httptest.NewRecorder()
-	r := httptest.NewRequest("POST", "/path", nil)
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest("POST", "/path", nil)
 
-	mux.ServeHTTP(w, r)
+		mux.ServeHTTP(w, r)
 
-	if len(handler.ServeHTTPxCalls()) > 0 {
-		t.Fatalf("expected handler to not be called but was")
-	}
+		if len(handler.ServeHTTPxCalls()) > 0 {
+			t.Fatalf("expected handler to not be called but was")
+		}
 
-	if w.Code != 405 {
-		t.Fatalf("expected code to be 405 but got: %d", w.Code)
-	}
+		if w.Code != 405 {
+			t.Fatalf("expected code to be 405 but got: %d", w.Code)
+		}
+	})
+
+	t.Run("custom method not allowed handler", func(t *testing.T) {
+		mux := New()
+
+		expectedBody := "Custom 405!"
+
+		mux.SetMethodNotAllowedHandlerFunc(func(w http.ResponseWriter, r *http.Request, c Context) {
+			w.WriteHeader(405)
+			io.WriteString(w, expectedBody)
+		})
+
+		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request, c Context) {}, mux.PATCH())
+
+		r := httptest.NewRequest("PUT", "/", nil)
+		w := httptest.NewRecorder()
+
+		mux.ServeHTTP(w, r)
+
+		if w.Code != 405 {
+			t.Errorf("expected error code to be 405 but got %d", w.Code)
+		}
+		if body := w.Body.String(); body != expectedBody {
+			t.Errorf("expected body to be %q but got %q", expectedBody, body)
+		}
+	})
 }
 
 func TestGetMiddleware(t *testing.T) {
@@ -72,7 +99,7 @@ func TestGetMiddleware(t *testing.T) {
 			w.Header().Set("X-Custom", "value")
 			io.WriteString(w, "hello!")
 		},
-		GET,
+		mux.GET(),
 	)
 
 	// GET

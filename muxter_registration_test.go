@@ -35,6 +35,28 @@ func TestRegistration(t *testing.T) {
 			Name:   "no errors",
 			Routes: []string{"/api", "/api/", "/api/:id", "/api/:id/other"},
 		},
+		{
+			Name:          "empty pattern",
+			Routes:        []string{""},
+			ExpectedError: "muxter: cannot register empty route pattern",
+		},
+		{
+			Name: "register segments after catchall",
+			Routes: []string{
+				"/*catchall/segment",
+			},
+			ExpectedError: `muxter: failed to register route /*catchall/segment - cannot register segments after a catchall expression "*catchall"`,
+		},
+		{
+			Name:          "multiple catchall registrations",
+			Routes:        []string{"/*catch", "/*catch"},
+			ExpectedError: "muxter: failed to register route /*catch - multiple registrations",
+		},
+		{
+			Name:          "catchall mismatch",
+			Routes:        []string{"/*catch", "/*all"},
+			ExpectedError: "muxter: failed to register route /*all - mismatched wild cards *catch and *all",
+		},
 	}
 
 	for _, tc := range testcases {

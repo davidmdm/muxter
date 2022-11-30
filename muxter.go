@@ -3,6 +3,7 @@ package muxter
 import (
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/davidmdm/muxter/internal/pool"
@@ -25,10 +26,11 @@ var defaultMethodNotAllowedHandler HandlerFunc = func(w http.ResponseWriter, r *
 
 // Mux is a request multiplexer with the same routing behaviour as the standard libraries net/http ServeMux
 type Mux struct {
-	root               *node
-	notFoundHandler    Handler
-	middlewares        []Middleware
-	matchTrailingSlash *bool
+	root                    *node
+	notFoundHandler         Handler
+	methodNotAllowedHandler Handler
+	middlewares             []Middleware
+	matchTrailingSlash      *bool
 }
 
 type MuxOption func(*Mux)
@@ -88,11 +90,19 @@ func (m *Mux) ServeHTTPx(w http.ResponseWriter, r *http.Request, c Context) {
 }
 
 func (m *Mux) SetNotFoundHandler(handler Handler) {
-	m.notFoundHandler = WithMiddleware(handler, m.middlewares...)
+	m.notFoundHandler = handler
 }
 
 func (m *Mux) SetNotFoundHandlerFunc(handler HandlerFunc) {
 	m.SetNotFoundHandler(handler)
+}
+
+func (m *Mux) SetMethodNotAllowedHandler(handler Handler) {
+	m.methodNotAllowedHandler = handler
+}
+
+func (m *Mux) SetMethodNotAllowedHandlerFunc(handler HandlerFunc) {
+	m.SetMethodNotAllowedHandler(handler)
 }
 
 // Use registers global middlewares for your routes. Only routes registered after the call to use will be affected
@@ -131,6 +141,9 @@ func (m *Mux) Handle(pattern string, handler Handler, middlewares ...Middleware)
 		if cpy.matchTrailingSlash == nil {
 			cpy.matchTrailingSlash = m.matchTrailingSlash
 		}
+		if cpy.methodNotAllowedHandler == nil {
+			cpy.methodNotAllowedHandler = m.methodNotAllowedHandler
+		}
 		handler = &cpy
 	}
 
@@ -144,45 +157,74 @@ func (m *Mux) StandardHandle(pattern string, handler http.Handler, middlewares .
 	m.Handle(pattern, Adaptor(handler))
 }
 
-type MethodHandler struct {
-	GET                     Handler
-	POST                    Handler
-	PUT                     Handler
-	PATCH                   Handler
-	HEAD                    Handler
-	DELETE                  Handler
-	MethodNotAllowedHandler Handler
-}
+func (m *Mux) Method(method string) Middleware {
+	methodNotAllowed := m.methodNotAllowedHandler
+	if methodNotAllowed == nil {
+		methodNotAllowed = defaultMethodNotAllowedHandler
+	}
 
-func (mh MethodHandler) getHandler(method string) (handler Handler) {
-	defer func() {
-		if handler == nil {
-			if mh.MethodNotAllowedHandler == nil {
-				handler = defaultMethodNotAllowedHandler
-			} else {
-				handler = mh.MethodNotAllowedHandler
+	method = strings.ToUpper(method)
+
+	return func(h Handler) Handler {
+		return HandlerFunc(func(w http.ResponseWriter, r *http.Request, c Context) {
+			if strings.ToUpper(r.Method) != method {
+				methodNotAllowed.ServeHTTPx(w, r, c)
+				return
 			}
-		}
-	}()
-
-	switch strings.ToUpper(method) {
-	case "GET":
-		return mh.GET
-	case "POST":
-		return mh.POST
-	case "DELETE":
-		return mh.DELETE
-	case "PUT":
-		return mh.PUT
-	case "PATCH":
-		return mh.PATCH
-	case "HEAD":
-		return mh.HEAD
-	default:
-		return nil
+			h.ServeHTTPx(w, r, c)
+		})
 	}
 }
 
-func (mh MethodHandler) ServeHTTPx(w http.ResponseWriter, r *http.Request, c Context) {
-	mh.getHandler(r.Method).ServeHTTPx(w, r, c)
+func (m *Mux) GET() Middleware {
+	return func(h Handler) Handler {
+		getGuard := m.Method("GET")(h)
+		headGuard := m.HEAD()(h)
+		return HandlerFunc(func(w http.ResponseWriter, r *http.Request, c Context) {
+			if strings.ToUpper(r.Method) == "HEAD" {
+				headGuard.ServeHTTPx(w, r, c)
+				return
+			}
+			getGuard.ServeHTTPx(w, r, c)
+		})
+	}
+}
+
+func (m *Mux) HEAD() Middleware {
+	return func(h Handler) Handler {
+		guard := m.Method("HEAD")(h)
+		return HandlerFunc(func(w http.ResponseWriter, r *http.Request, c Context) {
+			if strings.ToUpper(r.Method) != "HEAD" {
+				guard.ServeHTTPx(w, r, c)
+				return
+			}
+
+			hrw := &headResponseWriter{w, 0}
+			h.ServeHTTPx(hrw, r, c)
+			if w.Header().Get("Content-Length") == "" {
+				w.Header().Set("Content-Length", strconv.Itoa(hrw.contentLength))
+			}
+		})
+	}
+}
+
+func (m *Mux) POST() Middleware   { return m.Method("POST") }
+func (m *Mux) PUT() Middleware    { return m.Method("PUT") }
+func (m *Mux) PATCH() Middleware  { return m.Method("PATCH") }
+func (m *Mux) DELETE() Middleware { return m.Method("DELETE") }
+
+type headResponseWriter struct {
+	http.ResponseWriter
+	contentLength int
+}
+
+func (w headResponseWriter) Flush() {
+	if f, ok := w.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+func (w *headResponseWriter) Write(b []byte) (int, error) {
+	w.contentLength += len(b)
+	return len(b), nil
 }

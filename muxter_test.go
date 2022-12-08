@@ -30,27 +30,27 @@ func TestRoutingx(t *testing.T) {
 				"/api": {
 					ogReqPath: "/api",
 					pattern:   "/api",
-					params:    Ptr([]internal.Param{}),
+					params:    &[]internal.Param{},
 				},
 				"/app": {
 					ogReqPath: "/app",
 					pattern:   "/app",
-					params:    Ptr([]internal.Param{}),
+					params:    &[]internal.Param{},
 				},
 				"/app/": {
 					ogReqPath: "/app/",
 					pattern:   "/app/",
-					params:    Ptr([]internal.Param{}),
+					params:    &[]internal.Param{},
 				},
 				"/app/index": {
 					ogReqPath: "/app/index",
 					pattern:   "/app/",
-					params:    Ptr([]internal.Param{}),
+					params:    &[]internal.Param{},
 				},
 				"/public": {
 					ogReqPath: "/public",
 					pattern:   "",
-					params:    Ptr([]internal.Param{}),
+					params:    &[]internal.Param{},
 				},
 			},
 		},
@@ -66,32 +66,32 @@ func TestRoutingx(t *testing.T) {
 				"/api/root": {
 					ogReqPath: "/api/root",
 					pattern:   "/api/root",
-					params:    Ptr([]internal.Param{}),
+					params:    &[]internal.Param{},
 				},
 				"/api/svc": {
 					ogReqPath: "/api/svc",
 					pattern:   "/api/:api",
-					params:    Ptr([]internal.Param{{Key: "api", Value: "svc"}}),
+					params:    &[]internal.Param{{Key: "api", Value: "svc"}},
 				},
 				"/api/svc/": {
 					ogReqPath: "/api/svc/",
 					pattern:   "/api/:api/",
-					params:    Ptr([]internal.Param{{Key: "api", Value: "svc"}}),
+					params:    &[]internal.Param{{Key: "api", Value: "svc"}},
 				},
 				"/api/svc/users": {
 					ogReqPath: "/api/svc/users",
 					pattern:   "/api/:api/",
-					params:    Ptr([]internal.Param{{Key: "api", Value: "svc"}}),
+					params:    &[]internal.Param{{Key: "api", Value: "svc"}},
 				},
 				"/api/svc/ctx/mine": {
 					ogReqPath: "/api/svc/ctx/mine",
 					pattern:   "/api/:api/ctx/:ctx",
-					params:    Ptr([]internal.Param{{Key: "api", Value: "svc"}, {Key: "ctx", Value: "mine"}}),
+					params:    &[]internal.Param{{Key: "api", Value: "svc"}, {Key: "ctx", Value: "mine"}},
 				},
 				"/api/svc/ctx/mine/": {
 					ogReqPath: "/api/svc/ctx/mine/",
 					pattern:   "/api/:api/",
-					params:    Ptr([]internal.Param{{Key: "api", Value: "svc"}, {Key: "ctx", Value: "mine"}}),
+					params:    &[]internal.Param{{Key: "api", Value: "svc"}, {Key: "ctx", Value: "mine"}},
 				},
 			},
 		},
@@ -105,17 +105,17 @@ func TestRoutingx(t *testing.T) {
 				"/api/wild": {
 					ogReqPath: "/api/wild",
 					pattern:   "/api/:seg",
-					params:    Ptr([]internal.Param{{Key: "seg", Value: "wild"}}),
+					params:    &[]internal.Param{{Key: "seg", Value: "wild"}},
 				},
 				"/api/static": {
 					ogReqPath: "/api/static",
 					pattern:   "/api/static",
-					params:    Ptr([]internal.Param{}),
+					params:    &[]internal.Param{},
 				},
 				"/api/stat": {
 					ogReqPath: "/api/stat",
 					pattern:   "/api/:seg",
-					params:    Ptr([]internal.Param{{Key: "seg", Value: "stat"}}),
+					params:    &[]internal.Param{{Key: "seg", Value: "stat"}},
 				},
 			},
 		},
@@ -130,15 +130,15 @@ func TestRoutingx(t *testing.T) {
 				"/api/wild": {
 					ogReqPath: "/api/wild",
 					pattern:   "/api/:seg",
-					params:    Ptr([]internal.Param{{Key: "seg", Value: "wild"}}),
+					params:    &[]internal.Param{{Key: "seg", Value: "wild"}},
 				},
 				"/api/test/catch/all": {
 					ogReqPath: "/api/test/catch/all",
 					pattern:   "/api/:seg/*catchall",
-					params: Ptr([]internal.Param{
+					params: &[]internal.Param{
 						{Key: "seg", Value: "test"},
 						{Key: "catchall", Value: "catch/all"},
-					}),
+					},
 				},
 			},
 		},
@@ -684,8 +684,4 @@ func TestNestedMuxes(t *testing.T) {
 			t.Fatalf("expected not found handler to be called %d time(s) but got %d", 2, calls)
 		}
 	})
-}
-
-func Ptr[T any](value T) *T {
-	return &value
 }

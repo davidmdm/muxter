@@ -17,17 +17,18 @@ const (
 var errMultipleRegistrations = errors.New("multiple registrations")
 
 type value struct {
-	handler Handler
-	pattern string
+	handler    Handler
+	pattern    string
+	isRedirect bool
 }
 
 type node struct {
-	Key      string
 	Value    *value
-	Children []*node
-	Indices  []byte
 	Wildcard *node
 	Catchall *node
+	Key      string
+	Children []*node
+	Indices  []byte
 	Type     int
 }
 
@@ -161,8 +162,6 @@ func (n *node) insert(key string, value *value) (*node, error) {
 	return targetNode, nil
 }
 
-var redirectValue = &value{handler: defaultRedirectHandler}
-
 func (n *node) Lookup(path string, params *[]internal.Param, matchTrailingSlash bool) (result *value) {
 	var fallback *value
 	defer func() {
@@ -183,7 +182,7 @@ Walk:
 					continue Walk
 				}
 				if n.Value != nil && path+"/" == n.Key {
-					return redirectValue
+					return &value{isRedirect: true, pattern: n.Value.pattern[:len(n.Value.pattern)-1]}
 				}
 				return nil
 			}

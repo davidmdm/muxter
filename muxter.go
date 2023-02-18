@@ -26,11 +26,12 @@ var defaultMethodNotAllowedHandler HandlerFunc = func(w http.ResponseWriter, r *
 
 // Mux is a request multiplexer with the same routing behaviour as the standard libraries net/http ServeMux
 type Mux struct {
-	root                    *node
 	notFoundHandler         Handler
 	methodNotAllowedHandler Handler
-	middlewares             []Middleware
+	root                    *node
 	matchTrailingSlash      *bool
+	middlewares             []Middleware
+	globalwares             []Middleware
 }
 
 type MuxOption func(*Mux)
@@ -48,6 +49,7 @@ func New(options ...MuxOption) *Mux {
 	m := &Mux{
 		root:               &node{},
 		middlewares:        []Middleware{},
+		globalwares:        []Middleware{},
 		notFoundHandler:    nil,
 		matchTrailingSlash: nil,
 	}
@@ -72,7 +74,11 @@ func (m *Mux) ServeHTTPx(w http.ResponseWriter, r *http.Request, c Context) {
 
 	var handler Handler
 	if value != nil {
-		handler = value.handler
+		if value.isRedirect {
+			handler = WithMiddleware(defaultRedirectHandler, m.globalwares...)
+		} else {
+			handler = value.handler
+		}
 		if c.pattern != "" {
 			c.pattern = c.pattern + value.pattern[1:]
 		} else {
@@ -84,13 +90,14 @@ func (m *Mux) ServeHTTPx(w http.ResponseWriter, r *http.Request, c Context) {
 		} else {
 			handler = defaultNotFoundHandler
 		}
+		handler = WithMiddleware(handler, m.globalwares...)
 	}
 
 	handler.ServeHTTPx(w, r, c)
 }
 
 func (m *Mux) SetNotFoundHandler(handler Handler) {
-	m.notFoundHandler = WithMiddleware(handler, m.middlewares...)
+	m.notFoundHandler = handler
 }
 
 func (m *Mux) SetNotFoundHandlerFunc(handler HandlerFunc) {
@@ -107,9 +114,18 @@ func (m *Mux) SetMethodNotAllowedHandlerFunc(handler HandlerFunc) {
 
 // Use registers global middlewares for your routes. Only routes registered after the call to use will be affected
 // by a call to Use. Middlewares will be invoked such that the first middleware will have its effect run before the second
-// and so forth.
+// and so forth. Middlewares are not executed for globally set behavior like redirects or route not found. For middlewares
+// that will be include those routes see useGlobal
 func (m *Mux) Use(middlewares ...Middleware) {
 	m.middlewares = append(m.middlewares, middlewares...)
+}
+
+// UseGlobal registers middlewares globally. A global middleware is registered for normally like a call to Use(),
+// the only difference is that all globally registered middlewares will be applied to the not found and redirect handlers.
+// UseGlobal is best used near the beginning and for concerns like logging and tracing.
+func (m *Mux) UseGlobal(middlewares ...Middleware) {
+	m.middlewares = append(m.middlewares, middlewares...)
+	m.globalwares = append(m.globalwares, middlewares...)
 }
 
 // HandleFunc registers a net/http HandlerFunc for a given string pattern. Middlewares are applied
@@ -144,6 +160,7 @@ func (m *Mux) Handle(pattern string, handler Handler, middlewares ...Middleware)
 		if cpy.methodNotAllowedHandler == nil {
 			cpy.methodNotAllowedHandler = m.methodNotAllowedHandler
 		}
+		cpy.globalwares = append(append([]Middleware{}, m.globalwares...), cpy.globalwares...)
 		handler = &cpy
 	}
 

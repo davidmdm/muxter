@@ -8,9 +8,9 @@ import (
 )
 
 type Context struct {
+	params    *[]internal.Param
 	ogReqPath string
 	pattern   string
-	params    *[]internal.Param
 }
 
 // Param returns the param value for the key. If no param exists for the key the empty string is returned.

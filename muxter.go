@@ -235,6 +235,10 @@ type headResponseWriter struct {
 	contentLength int
 }
 
+func (w headResponseWriter) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
+}
+
 func (w headResponseWriter) Flush() {
 	if f, ok := w.ResponseWriter.(http.Flusher); ok {
 		f.Flush()

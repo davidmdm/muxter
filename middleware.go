@@ -185,6 +185,10 @@ type responseProxy struct {
 	code int
 }
 
+func (w responseProxy) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
+}
+
 func (w responseProxy) Flush() {
 	if f, ok := w.ResponseWriter.(http.Flusher); ok {
 		f.Flush()

@@ -156,6 +156,51 @@ var Decompress Middleware = func(h Handler) Handler {
 	})
 }
 
+func Compress() Middleware {
+	hasGZIP := func(value string) bool {
+		for _, enc := range strings.Split(value, ",") {
+			enc = strings.TrimSpace(enc)
+			if enc == "gzip" {
+				return true
+			}
+		}
+		return false
+	}
+
+	return func(h Handler) Handler {
+		return HandlerFunc(func(w http.ResponseWriter, r *http.Request, c Context) {
+			if !hasGZIP(r.Header.Get("Accept-Encoding")) {
+				h.ServeHTTPx(w, r, c)
+				return
+			}
+
+			gw := gzipResponseWriter{
+				ResponseWriter: w,
+				gzip:           gzip.NewWriter(w),
+			}
+
+			gw.Header().Set("Content-Encoding", "gzip")
+
+			h.ServeHTTPx(gw, r, c)
+
+			if err := gw.gzip.Close(); err != nil {
+				panic(err) // nothing else to do but panic and let users handle this in recovery middleware
+			}
+		})
+	}
+}
+
+type gzipResponseWriter struct {
+	http.ResponseWriter
+	gzip *gzip.Writer
+}
+
+func (w gzipResponseWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+
+func (w gzipResponseWriter) Write(data []byte) (int, error) {
+	return w.gzip.Write(data)
+}
+
 // Skip decorates a middleware by giving it a predicate function for when this middleware should be skipped.
 // if the predicateFunc returns true, the middleware is skipped.
 func Skip(middleware Middleware, predicateFunc func(*http.Request) bool) Middleware {

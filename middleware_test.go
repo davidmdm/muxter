@@ -208,6 +208,33 @@ func TestDecompressNoContent(t *testing.T) {
 	}
 }
 
+func TestCompress(t *testing.T) {
+	mux := New()
+
+	mux.HandleFunc(
+		"/",
+		func(w http.ResponseWriter, r *http.Request, c Context) {
+			io.WriteString(w, "hello world!")
+		},
+		Compress(),
+	)
+
+	w, r := httptest.NewRecorder(), httptest.NewRequest("GET", "/", nil)
+
+	r.Header.Set("Accept-Encoding", "gzip")
+	mux.ServeHTTP(w, r)
+
+	expectedEncoding := "gzip"
+	if actualEncoding := w.Header().Get("Content-Encoding"); actualEncoding != expectedEncoding {
+		t.Errorf("expected content-encoding to be %q but got %q", expectedEncoding, actualEncoding)
+	}
+
+	expectedBody := "\x1f\x8b\b\x00\x00\x00\x00\x00\x00\xff\xcaH\xcd\xc9\xc9W(\xcf/\xcaIQ\x04\x04\x00\x00\xff\xffm´\x03\f\x00\x00\x00"
+	if actualBody := w.Body.String(); expectedBody != actualBody {
+		t.Errorf("expected body to be %q but got %q", expectedBody, actualBody)
+	}
+}
+
 func TestSkipped(t *testing.T) {
 	mux := New()
 

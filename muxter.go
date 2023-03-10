@@ -238,7 +238,7 @@ func (mux *Mux) Delete(pattern string, h Handler, middlewares ...Middleware) {
 }
 
 func (mux *Mux) DeleteFunc(pattern string, fn HandlerFunc, middlewares ...Middleware) {
-	mux.DeleteFunc(pattern, fn, middlewares...)
+	mux.Delete(pattern, fn, middlewares...)
 }
 
 func (m *Mux) get() Middleware {

@@ -3,6 +3,7 @@ package muxter
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/davidmdm/muxter/internal"
@@ -11,6 +12,7 @@ import (
 const (
 	static = iota
 	wildcard
+	expression
 	catchall
 )
 
@@ -23,17 +25,19 @@ type value struct {
 }
 
 type node struct {
-	Value    *value
-	Wildcard *node
-	Catchall *node
-	Key      string
-	Children []*node
-	Indices  []byte
-	Type     int
+	Value      *value
+	Wildcard   *node
+	Catchall   *node
+	Expression *node
+	Key        string
+	Children   []*node
+	Indices    []byte
+	Type       int
+	expression *regexp.Regexp
 }
 
 func (n *node) Insert(key string, value *value) error {
-	idx := strings.IndexAny(key, ":*")
+	idx := strings.IndexAny(key, "#:*")
 	if idx == -1 {
 		_, err := n.insert(key, value)
 		return err
@@ -47,8 +51,17 @@ func (n *node) Insert(key string, value *value) error {
 	}
 
 	post := key[idx:]
+	slashIdx := func() int {
+		if post[0] != '#' {
+			return strings.IndexByte(post, '/')
+		}
+		i := regexp.MustCompile(`[^\\]/`).FindStringIndex(post)
+		if i == nil {
+			return -1
+		}
+		return i[1] - 1
+	}()
 
-	slashIdx := strings.IndexByte(post, '/')
 	if slashIdx == -1 {
 		_, err := n.insert(post, value)
 		return err
@@ -68,6 +81,44 @@ func (n *node) Insert(key string, value *value) error {
 
 func (n *node) insert(key string, value *value) (*node, error) {
 	switch key[0] {
+	case '#':
+		idx := strings.IndexByte(key, ':')
+		if idx == -1 {
+			return nil, fmt.Errorf("invalid regexp param: %s", key)
+		}
+
+		k := key[1:idx]
+
+		exp, err := regexp.Compile(fmt.Sprintf("^(%s)", key[idx+1:]))
+		if err != nil {
+			return nil, err
+		}
+
+		if n.Expression != nil {
+			oldCanonicalKey := fmt.Sprintf("#%s:%s", n.Expression.Key, n.expression)
+			newCanonicalKey := fmt.Sprintf("#%s:%s", k, exp)
+
+			if oldCanonicalKey != newCanonicalKey {
+				return nil, fmt.Errorf("mismatched regexp segments %s  and %s", oldCanonicalKey, newCanonicalKey)
+			}
+			if value != nil {
+				if n.Expression.Value != nil {
+					return nil, errMultipleRegistrations
+				}
+				n.Expression.Value = value
+			}
+			return n.Expression, nil
+		}
+
+		n.Expression = &node{
+			Value:      value,
+			Key:        k,
+			Type:       expression,
+			expression: exp,
+		}
+
+		return n.Expression, nil
+
 	case ':':
 		if n.Wildcard != nil {
 			if n.Wildcard.Key != key[1:] {
@@ -87,7 +138,9 @@ func (n *node) insert(key string, value *value) (*node, error) {
 			Value: value,
 			Type:  wildcard,
 		}
+
 		return n.Wildcard, nil
+
 	case '*':
 		if n.Catchall != nil {
 			if n.Catchall.Key != key[1:] {
@@ -213,6 +266,16 @@ Walk:
 				Value: path,
 			})
 			return n.Value
+		case expression:
+			i := n.expression.FindStringIndex(path)
+			if i == nil {
+				return nil
+			}
+			*params = append(*params, internal.Param{
+				Key:   n.Key,
+				Value: path[:i[1]],
+			})
+			path = path[i[1]:]
 		}
 
 		if matchTrailingSlash && path == "/" && n.Value != nil {
@@ -236,6 +299,10 @@ Walk:
 
 		if n.Wildcard != nil {
 			n = n.Wildcard
+			continue Walk
+		}
+		if n.Expression != nil {
+			n = n.Expression
 			continue Walk
 		}
 

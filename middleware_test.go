@@ -48,7 +48,7 @@ func TestMethodMiddleware(t *testing.T) {
 		mux := New()
 		handler := new(HandlerMock)
 
-		mux.Handle("/", handler, mux.GET())
+		mux.Get("/", handler)
 
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest("POST", "/path", nil)
@@ -74,7 +74,7 @@ func TestMethodMiddleware(t *testing.T) {
 			io.WriteString(w, expectedBody)
 		})
 
-		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request, c Context) {}, mux.PATCH())
+		mux.PatchFunc("/", func(w http.ResponseWriter, r *http.Request, c Context) {})
 
 		r := httptest.NewRequest("PUT", "/", nil)
 		w := httptest.NewRecorder()
@@ -93,13 +93,12 @@ func TestMethodMiddleware(t *testing.T) {
 func TestGetMiddleware(t *testing.T) {
 	mux := New()
 
-	mux.HandleFunc(
+	mux.GetFunc(
 		"/",
 		func(w http.ResponseWriter, r *http.Request, c Context) {
 			w.Header().Set("X-Custom", "value")
 			io.WriteString(w, "hello!")
 		},
-		mux.GET(),
 	)
 
 	// GET

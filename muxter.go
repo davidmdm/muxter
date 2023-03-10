@@ -193,10 +193,58 @@ func (m *Mux) Method(method string) Middleware {
 	}
 }
 
-func (m *Mux) GET() Middleware {
+func (mux *Mux) Get(pattern string, h Handler, middlewares ...Middleware) {
+	mux.Handle(pattern, h, append([]Middleware{mux.get()}, middlewares...)...)
+}
+
+func (mux *Mux) GetFunc(pattern string, fn HandlerFunc, middlewares ...Middleware) {
+	mux.Get(pattern, fn, middlewares...)
+}
+
+func (mux *Mux) Head(pattern string, h Handler, middlewares ...Middleware) {
+	mux.Handle(pattern, h, append([]Middleware{mux.head()}, middlewares...)...)
+}
+
+func (mux *Mux) HeadFunc(pattern string, fn HandlerFunc, middlewares ...Middleware) {
+	mux.Head(pattern, fn, middlewares...)
+}
+
+func (mux *Mux) Post(pattern string, h Handler, middlewares ...Middleware) {
+	mux.Handle(pattern, h, append([]Middleware{mux.post()}, middlewares...)...)
+}
+
+func (mux *Mux) PostFunc(pattern string, fn HandlerFunc, middlewares ...Middleware) {
+	mux.Post(pattern, fn, middlewares...)
+}
+
+func (mux *Mux) Put(pattern string, h Handler, middlewares ...Middleware) {
+	mux.Handle(pattern, h, append([]Middleware{mux.put()}, middlewares...)...)
+}
+
+func (mux *Mux) PutFunc(pattern string, fn HandlerFunc, middlewares ...Middleware) {
+	mux.Put(pattern, fn, middlewares...)
+}
+
+func (mux *Mux) Patch(pattern string, h Handler, middlewares ...Middleware) {
+	mux.Handle(pattern, h, append([]Middleware{mux.patch()}, middlewares...)...)
+}
+
+func (mux *Mux) PatchFunc(pattern string, fn HandlerFunc, middlewares ...Middleware) {
+	mux.Patch(pattern, fn, middlewares...)
+}
+
+func (mux *Mux) Delete(pattern string, h Handler, middlewares ...Middleware) {
+	mux.Handle(pattern, h, append([]Middleware{mux.del()}, middlewares...)...)
+}
+
+func (mux *Mux) DeleteFunc(pattern string, fn HandlerFunc, middlewares ...Middleware) {
+	mux.DeleteFunc(pattern, fn, middlewares...)
+}
+
+func (m *Mux) get() Middleware {
 	return func(h Handler) Handler {
 		getGuard := m.Method("GET")(h)
-		headGuard := m.HEAD()(h)
+		headGuard := m.head()(h)
 		return HandlerFunc(func(w http.ResponseWriter, r *http.Request, c Context) {
 			if strings.ToUpper(r.Method) == "HEAD" {
 				headGuard.ServeHTTPx(w, r, c)
@@ -207,7 +255,7 @@ func (m *Mux) GET() Middleware {
 	}
 }
 
-func (m *Mux) HEAD() Middleware {
+func (m *Mux) head() Middleware {
 	return func(h Handler) Handler {
 		guard := m.Method("HEAD")(h)
 		return HandlerFunc(func(w http.ResponseWriter, r *http.Request, c Context) {
@@ -225,10 +273,10 @@ func (m *Mux) HEAD() Middleware {
 	}
 }
 
-func (m *Mux) POST() Middleware   { return m.Method("POST") }
-func (m *Mux) PUT() Middleware    { return m.Method("PUT") }
-func (m *Mux) PATCH() Middleware  { return m.Method("PATCH") }
-func (m *Mux) DELETE() Middleware { return m.Method("DELETE") }
+func (m *Mux) post() Middleware  { return m.Method("POST") }
+func (m *Mux) put() Middleware   { return m.Method("PUT") }
+func (m *Mux) patch() Middleware { return m.Method("PATCH") }
+func (m *Mux) del() Middleware   { return m.Method("DELETE") }
 
 type headResponseWriter struct {
 	http.ResponseWriter

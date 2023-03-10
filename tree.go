@@ -95,7 +95,7 @@ func (n *node) insert(key string, value *value) (*node, error) {
 		}
 
 		if n.Expression != nil {
-			oldCanonicalKey := fmt.Sprintf("#%s:%s", n.Expression.Key, n.expression)
+			oldCanonicalKey := fmt.Sprintf("#%s:%s", n.Expression.Key, n.Expression.expression)
 			newCanonicalKey := fmt.Sprintf("#%s:%s", k, exp)
 
 			if oldCanonicalKey != newCanonicalKey {
@@ -275,7 +275,11 @@ Walk:
 				Key:   n.Key,
 				Value: path[:i[1]],
 			})
+
 			path = path[i[1]:]
+			if len(path) == 0 {
+				return n.Value
+			}
 		}
 
 		if matchTrailingSlash && path == "/" && n.Value != nil {

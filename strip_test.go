@@ -40,5 +40,5 @@ func TestStripPathDepth(t *testing.T) {
 }
 
 func TestFail(t *testing.T) {
-	t.Error("Test")
+	t.Error("Test!")
 }

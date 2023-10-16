@@ -685,3 +685,29 @@ func TestNestedMuxes(t *testing.T) {
 		}
 	})
 }
+
+func TestRegexExpressionMatching(t *testing.T) {
+	mux := New()
+
+	mock := new(HandlerMock)
+
+	mux.Handle(`/assets/#dir:folder-\d+/:name`, mock)
+
+	r := httptest.NewRequest("GET", "/assets/folder-123/readme.txt", nil)
+	w := httptest.NewRecorder()
+
+	mux.ServeHTTP(w, r)
+
+	if calls := len(mock.calls.ServeHTTPx); calls != 1 {
+		t.Fatalf("expected 1 call but got %d", calls)
+	}
+
+	actualParams := mock.calls.ServeHTTPx[0].C.Params()
+	expectedParams := map[string]string{
+		"dir":  "folder-123",
+		"name": "readme.txt",
+	}
+	if !reflect.DeepEqual(actualParams, expectedParams) {
+		t.Fatalf("expected %+v but got %+v", expectedParams, actualParams)
+	}
+}
